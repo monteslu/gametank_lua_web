@@ -4,13 +4,23 @@
 // public/cc65 is gitignored - regenerate anytime.
 import { cp, mkdir, readdir, writeFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PKG = path.resolve(HERE, "..", "gametank_lua_sdk", "node_modules", "romdev-toolchain-cc65");
-if (!existsSync(PKG)) {
-  console.error(`romdev-toolchain-cc65 not found at ${PKG}\nRun 'npm install' in ../gametank_lua_sdk first.`);
+
+// Resolve the gtlua package (and its bundled cc65 toolchain) through node's own
+// resolution, so this works whether gtlua is the published npm package or a
+// local file: link - and the IDE needs no sibling SDK checkout to build.
+const require = createRequire(import.meta.url);
+const GTLUA = path.dirname(require.resolve("gtlua/package.json"));
+// romdev-toolchain-cc65 doesn't export ./package.json and npm may hoist it, so
+// resolve its main entry (from gtlua's scope) and walk up to the package root.
+const cc65Main = require.resolve("romdev-toolchain-cc65", { paths: [GTLUA, HERE] });
+const PKG = cc65Main.slice(0, cc65Main.lastIndexOf("romdev-toolchain-cc65") + "romdev-toolchain-cc65".length);
+if (!existsSync(path.join(PKG, "wasm"))) {
+  console.error(`romdev-toolchain-cc65 wasm not found under ${PKG}\nRun 'npm install' first.`);
   process.exit(1);
 }
 
@@ -47,7 +57,7 @@ console.log("staged cc65 toolchain -> public/cc65 (" + SUBS.map((s) => `${s}=${m
 // The whole sdk/ dir (~500K: .c/.s/.h/.inc/.cfg) so #includes resolve without
 // cherry-picking. The manifest names the base unit set the browser build links
 // for a minimal (no-asset) EEPROM32K cart.
-const SDK = path.resolve(HERE, "..", "gametank_lua_sdk", "sdk");
+const SDK = path.join(GTLUA, "sdk");
 const SDK_OUT = path.join(HERE, "public", "sdk");
 await rm(SDK_OUT, { recursive: true, force: true });
 await cp(SDK, SDK_OUT, { recursive: true });

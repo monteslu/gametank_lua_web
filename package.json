@@ -13,9 +13,9 @@
     "test:browser": "node test/browser-build.mjs"
   },
   "dependencies": {
+    "gtlua": "^0.1.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "gtlua": "file:../gametank_lua_sdk"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
