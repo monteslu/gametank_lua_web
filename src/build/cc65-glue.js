@@ -1,14 +1,10 @@
 // cc65-glue.js - our own minimal loader for the cc65/ca65/ld65 WASM modules.
 //
-// STATUS: WIP - NOT YET WIRED INTO THE BUILD. It instantiates + runs cc65 (exit
-// 0, reads source, writes the .s header) but the output is TRUNCATED: it stops
-// right after the assembler preamble (288 bytes vs the correct 606), dropping
-// the compiled function bodies. Verified against the emscripten glue on the same
-// wasm + input. No stderr, no error, no missing syscall in the trace - cc65
-// simply emits less. Suspect a subtle bug in the WASI/syscall layer (a stat/
-// fdstat field, a stdio buffering interaction, or heap-grow view staleness) that
-// makes cc65's output writer stop early. The emscripten glue + Vite node-shim is
-// the WORKING path meanwhile (browser-toolchain.js uses it).
+// STATUS: WORKS. Runs cc65/ca65/ld65 correctly (fixed: fd_read must skip empty
+// iovec slots not stop; fd_seek takes a single i64 offset as BigInt, not lo/hi).
+// Output is currently 1-2 bytes off native on some .o (a small embedded file
+// metadata diff, same class the 0.1.3 reproducibility fix addressed) - cosmetic,
+// being chased. Env-neutral: same code in node or browser.
 //
 // The emscripten-generated glue is ~50KB of environment-detection cruft
 // (ENVIRONMENT_IS_NODE, createRequire, three ways to fetch the wasm...). We
@@ -189,27 +185,33 @@ export async function runWasmTool(wasmBinary, { fs, argv, print, printErr }) {
     fd_read: (fd, iovPtr, iovCnt, pRead) => {
       const f = openFiles.get(fd);
       let read = 0;
-      for (let i = 0; i < iovCnt; i++) {
+      for (let i = 0; i < iovCnt && f; i++) {
         const base = HEAPU32[(iovPtr >> 2) + i * 2];
         const len = HEAPU32[(iovPtr >> 2) + i * 2 + 1];
-        if (!f) break;
+        if (len === 0) continue;                       // empty iovec slot - skip, don't stop
         const avail = Math.min(len, f.data.length - f.pos);
-        if (avail <= 0) break;
+        if (avail <= 0) break;                          // genuine EOF - stop
         HEAPU8.set(f.data.subarray(f.pos, f.pos + avail), base);
         f.pos += avail; read += avail;
+        if (avail < len) break;                         // partial fill = hit EOF this iovec
       }
       HEAPU32[pRead >> 2] = read;
       return 0;
     },
     fd_close: (fd) => { openFiles.delete(fd); return 0; },
-    fd_seek: (fd, offLow, offHigh, whence, pNewOff) => {
+    // WASI fd_seek(fd, offset:i64, whence, newOffset). The offset is a single
+    // 64-bit value delivered as a BigInt (NOT a lo/hi i32 pair - getting the
+    // signature wrong shifts whence/newOffset and yields EOVERFLOW on write).
+    fd_seek: (fd, offset, whence, pNewOff) => {
       const f = openFiles.get(fd);
       if (!f) return 8; // EBADF
-      const off = offLow; // files are < 4GB; ignore offHigh
-      if (whence === 0) f.pos = off;           // SEEK_SET
-      else if (whence === 1) f.pos += off;     // SEEK_CUR
-      else if (whence === 2) f.pos = f.data.length + off; // SEEK_END
-      HEAPU32[pNewOff >> 2] = f.pos; HEAPU32[(pNewOff >> 2) + 1] = 0;
+      const off = typeof offset === "bigint" ? Number(offset) : offset;
+      if (whence === 0) f.pos = off;                        // SEEK_SET
+      else if (whence === 1) f.pos += off;                  // SEEK_CUR
+      else if (whence === 2) f.pos = f.data.length + off;   // SEEK_END
+      // newOffset is a 64-bit result; write it as i64 (lo, hi).
+      HEAPU32[pNewOff >> 2] = f.pos >>> 0;
+      HEAPU32[(pNewOff >> 2) + 1] = 0;
       return 0;
     },
     fd_fdstat_get: (fd, bufPtr) => {
