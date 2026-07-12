@@ -1,0 +1,64 @@
+:root {
+  --bg: #14161c;
+  --panel: #1b1e26;
+  --line: #2a2e3a;
+  --fg: #d6dae2;
+  --dim: #6b7280;
+  --accent: #5ec8ff;
+  --err: #ff5c6c;
+  --warn: #ffcc55;
+  --ok: #57d977;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+
+.ide { display: flex; flex-direction: column; height: 100vh; }
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.logo { font-weight: 600; letter-spacing: 0.2px; }
+.logo .dim { color: var(--dim); font-weight: 400; }
+.status { font-size: 12px; color: var(--ok); }
+.status.err { color: var(--err); }
+
+.panes { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.pane:last-child { border-right: none; }
+.pane-title {
+  padding: 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line);
+}
+
+/* editor */
+.editor { flex: 1; display: flex; min-height: 0; background: #0f1117; overflow: hidden; }
+.gutter {
+  width: 44px; padding: 8px 0; overflow: hidden; text-align: right;
+  color: var(--dim); font: 13px/1.55 var(--mono); user-select: none; background: #0d0f14;
+}
+.gline { padding-right: 6px; white-space: nowrap; }
+.gline .lnum { margin-left: 4px; }
+.gline.error { color: var(--err); }
+.gline.warning { color: var(--warn); }
+.code {
+  flex: 1; padding: 8px 10px; border: 0; outline: 0; resize: none;
+  background: transparent; color: var(--fg); font: 13px/1.55 var(--mono);
+  white-space: pre; overflow: auto; tab-size: 2;
+}
+
+/* output */
+.output-pane { overflow: hidden; }
+.problems { list-style: none; margin: 0; padding: 6px 0; max-height: 40%; overflow: auto; font: 12px/1.5 var(--mono); }
+.problems li { padding: 2px 12px; }
+.problems li.ok { color: var(--ok); }
+.problems li.error { color: var(--err); }
+.problems li.warning { color: var(--warn); }
+.problems .loc { color: var(--dim); margin-right: 8px; }
+.genc {
+  flex: 1; margin: 0; padding: 8px 12px; overflow: auto; min-height: 0;
+  font: 12px/1.5 var(--mono); color: #9fb3c8; background: #0f1117; white-space: pre;
+}
