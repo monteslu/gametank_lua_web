@@ -8,6 +8,8 @@ import { listProjects, getProject, createProject, saveProject, deleteProject } f
 import { loadExampleFiles } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
 import { downloadBytes, pickFile } from "./util/download.js";
+import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
+import { newSheet } from "./gfx/gtg.js";
 
 const HELLO = `-- hello: a complete GameTank game. No assets, just code.
 function _draw()
@@ -35,6 +37,8 @@ export function App() {
   const [currentId, setCurrentId] = useState(null);
   const [source, setSource] = useState(HELLO);
   const [projectName, setProjectName] = useState("hello");
+  const [sheet, setSheet] = useState(null);      // Uint8Array(16384) or null (no gfx.gtg)
+  const [view, setView] = useState("code");      // "code" | "sprite"
 
   const [rom, setRom] = useState(null);
   const [building, setBuilding] = useState(false);
@@ -42,6 +46,7 @@ export function App() {
   const [buildErr, setBuildErr] = useState("");
   const buildSeq = useRef(0);
   const saveTimer = useRef(0);
+  const sheetSaveTimer = useRef(0);
 
   // --- projects list + initial project ------------------------------------
   const refreshProjects = useCallback(async () => {
@@ -71,6 +76,9 @@ export function App() {
     setCurrentId(rec.id);
     setProjectName(rec.name);
     setSource(asText(rec.files["main.lua"] ?? ""));
+    const g = rec.files["gfx.gtg"];
+    setSheet(g ? (g instanceof Uint8Array ? g : new Uint8Array(g)) : null);
+    setView("code");
     setRom(null); setBuildMsg(""); setBuildErr("");
   }, []);
 
@@ -98,6 +106,32 @@ export function App() {
       await saveProject(rec, Date.now());
       refreshProjects();
     }, 500);
+  }, [currentId, refreshProjects]);
+
+  // sprite-sheet edits: immutable buffer in, debounced persist as gfx.gtg
+  const onSheetChange = useCallback((buf) => {
+    setSheet(buf);
+    if (!currentId) return;
+    clearTimeout(sheetSaveTimer.current);
+    sheetSaveTimer.current = setTimeout(async () => {
+      const rec = await getProject(currentId);
+      if (!rec) return;
+      rec.files["gfx.gtg"] = buf;
+      await saveProject(rec, Date.now());
+      refreshProjects();
+    }, 500);
+  }, [currentId, refreshProjects]);
+
+  // create an empty sprite sheet for this project + switch to the sprite view
+  const addSheet = useCallback(async () => {
+    const buf = newSheet();
+    setSheet(buf); setView("sprite");
+    if (!currentId) return;
+    const rec = await getProject(currentId);
+    if (!rec) return;
+    rec.files["gfx.gtg"] = buf;
+    await saveProject(rec, Date.now());
+    refreshProjects();
   }, [currentId, refreshProjects]);
 
   // --- project ops ---------------------------------------------------------
@@ -140,6 +174,10 @@ export function App() {
     setBuilding(true); setBuildErr(""); setBuildMsg("building...");
     try {
       const { gtr, ms } = await buildGtr(source, {
+        // num8 (8.8 fixed) is a per-project numeric mode; default off to match
+        // the CLI. A project toggle can set it later; forcing it on would change
+        // fixed-point semantics for games that don't expect it.
+        sheetBytes: sheet ? sheet.buffer.slice(sheet.byteOffset, sheet.byteOffset + sheet.byteLength) : undefined,
         onProgress: (m) => { if (seq === buildSeq.current) setBuildMsg(m); },
       });
       if (seq !== buildSeq.current) return;
@@ -152,7 +190,7 @@ export function App() {
     } finally {
       if (seq === buildSeq.current) setBuilding(false);
     }
-  }, [source, errors.length]);
+  }, [source, errors.length, sheet]);
 
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
@@ -227,8 +265,15 @@ export function App() {
 
         <main className="panes">
           <section className="pane editor-pane">
-            <div className="pane-title">main.lua</div>
-            <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />
+            <div className="pane-tabs">
+              <button className={"tab " + (view === "code" ? "sel" : "")} onClick={() => setView("code")}>main.lua</button>
+              {sheet
+                ? <button className={"tab " + (view === "sprite" ? "sel" : "")} onClick={() => setView("sprite")}>gfx.gtg</button>
+                : <button className="tab add" onClick={addSheet} title="add a sprite sheet">+ sprites</button>}
+            </div>
+            {view === "code"
+              ? <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />
+              : <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
           </section>
 
           <section className="pane emu-pane">
