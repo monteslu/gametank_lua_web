@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { compile } from "gametank_lua_sdk/compiler/index.js";
+import { compile } from "gtlua/compiler/index.js";
 import { Editor } from "./Editor.jsx";
 
 const HELLO = `-- hello: a complete GameTank game. No assets, just code.

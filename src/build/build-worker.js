@@ -12,7 +12,7 @@
 // Protocol: main posts { type:"build", id, source, opts }; worker posts back
 // { type:"progress"|"done"|"error", id, ... }.
 
-import { build } from "gametank_lua_sdk/build";
+import { build } from "gtlua/build";
 import { runWasmTool } from "./cc65-glue.js";
 
 const GLUE_BASE = "/cc65/wasm";
