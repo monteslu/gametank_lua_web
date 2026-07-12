@@ -16,8 +16,8 @@
 // (fetched, env-flipped to web, blob-imported). runTool mounts the needed share
 // subdir itself and returns outputs; we copy those into the shared build vfs.
 import { runTool as toolRun } from "./browser-toolchain.js";
-import { compile } from "../compiler/index.js";
-import { peephole } from "../compiler/peephole.js";
+import { compile } from "gametank_lua_sdk/compiler/index.js";
+import { peephole } from "gametank_lua_sdk/compiler/peephole.js";
 
 // run one tool; its declared -o/-m/-Ln/--dbgfile outputs land back in `vfs`.
 async function tool(name, argv, vfs) {
