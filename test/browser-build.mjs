@@ -45,7 +45,7 @@ end`;
       const r = await window.__gtlua_test.build(src);
       return { ok: r.ok, gtrLen: r.gtr ? r.gtr.byteLength : 0, ms: r.ms, wall: Math.round(performance.now() - t0) };
     } catch (e) {
-      return { ok: false, buildError: { stage: e.stage, message: e.message, log: (e.log || "").slice(0, 500) } };
+      return { ok: false, buildError: { message: e.message } };
     }
   }, HELLO);
 
