@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "postinstall": "node scripts/stage-toolchain.mjs",
-    "stage": "node scripts/stage-toolchain.mjs"
+    "stage": "node scripts/stage-toolchain.mjs",
+    "test:browser": "node test/browser-build.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

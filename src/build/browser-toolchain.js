@@ -26,10 +26,23 @@ let shareManifest = null;         // { subdir: [relPaths] }
 async function loadFactory(tool) {
   const hit = factoryCache.get(tool);
   if (hit) return hit;
-  const [mod, wasmBinary] = await Promise.all([
-    import(/* @vite-ignore */ `${GLUE_BASE}/${tool}.js`),
+  // The cc65 emscripten glue was built for node (-sENVIRONMENT=node); loaded as
+  // a plain module in the browser it throws on `await import("module")`. That
+  // code only runs when ENVIRONMENT_IS_NODE, which the glue hardcodes true. So
+  // fetch the glue TEXT, flip the env flags to web/worker (the wasm is
+  // untouched), and import it as a blob module. The web path never touches node
+  // built-ins, and we pass wasmBinary + locateFile so it never fetches the .wasm
+  // itself. This uses the SDK's proven-correct glue verbatim.
+  const [glueText, wasmBinary] = await Promise.all([
+    fetch(`${GLUE_BASE}/${tool}.js`).then((r) => r.text()),
     fetch(`${GLUE_BASE}/${tool}.wasm`).then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)),
   ]);
+  const patched = glueText
+    .replace("var ENVIRONMENT_IS_WORKER=false", "var ENVIRONMENT_IS_WORKER=true")
+    .replace("var ENVIRONMENT_IS_NODE=true", "var ENVIRONMENT_IS_NODE=false");
+  const blobUrl = URL.createObjectURL(new Blob([patched], { type: "text/javascript" }));
+  const mod = await import(/* @vite-ignore */ blobUrl);
+  URL.revokeObjectURL(blobUrl);
   const entry = { factory: mod.default, wasmBinary };
   factoryCache.set(tool, entry);
   return entry;

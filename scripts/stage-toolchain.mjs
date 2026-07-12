@@ -42,3 +42,34 @@ for (const sub of SUBS) {
 }
 await writeFile(path.join(OUT, "share", "manifest.json"), JSON.stringify(manifest));
 console.log("staged cc65 toolchain -> public/cc65 (" + SUBS.map((s) => `${s}=${manifest[s].length}`).join(" ") + ")");
+
+// ---- stage the SDK C/asm runtime -> public/sdk ----------------------------
+// The whole sdk/ dir (~500K: .c/.s/.h/.inc/.cfg) so #includes resolve without
+// cherry-picking. The manifest names the base unit set the browser build links
+// for a minimal (no-asset) EEPROM32K cart.
+const SDK = path.resolve(HERE, "..", "gametank_lua_sdk", "sdk");
+const SDK_OUT = path.join(HERE, "public", "sdk");
+await rm(SDK_OUT, { recursive: true, force: true });
+await cp(SDK, SDK_OUT, { recursive: true });
+
+const sdkFiles = [];
+{
+  const walk = async (dir, rel) => {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const rp = rel ? rel + "/" + e.name : e.name;
+      if (e.isDirectory()) await walk(path.join(dir, e.name), rp);
+      else sdkFiles.push(rp);
+    }
+  };
+  await walk(SDK_OUT, "");
+}
+// base unit set for a minimal build (matches bin/gtlua.js section 2's always-on units)
+const sdkManifest = {
+  files: sdkFiles,
+  cUnits: ["gt_api", "gt_fixed", "gt_math"],
+  asmUnits: ["crt0", "vectors", "interrupt", "gt_blitq", "gt_fixed_asm", "gt_circ", "gt_line", "gt_print_asm"],
+  defs: { gt_api: [] },
+  asmDefs: {},
+};
+await writeFile(path.join(SDK_OUT, "manifest.json"), JSON.stringify(sdkManifest));
+console.log("staged SDK runtime -> public/sdk (" + sdkFiles.length + " files, " + sdkManifest.cUnits.length + " C + " + sdkManifest.asmUnits.length + " asm units)");

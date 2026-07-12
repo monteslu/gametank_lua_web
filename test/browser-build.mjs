@@ -1,74 +1,65 @@
-// Playwright test: does the browser build pipeline actually work in a REAL
-// browser? Starts Vite, loads the IDE, and drives the browser cc65 toolchain
-// (via the window test hook), capturing console errors. This is what we could
-// NOT verify without a browser: whether the emscripten glue + node-shim
-// instantiates + runs cc65 in-browser and produces correct output.
+// Playwright test: build a Lua game to a .gtr in a REAL browser, in the Worker
+// (threaded, warm tools). Owns vite's lifecycle; kills the whole process group.
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
+const PORT = 5000 + Math.floor(Date.now() % 900);
+const URL_ = `http://localhost:${PORT}/`;
+
 function startVite() {
   return new Promise((resolve, reject) => {
-    const proc = spawn("npm", ["run", "dev", "--", "--port", "5199", "--strictPort"], {
+    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
       cwd: new URL("..", import.meta.url).pathname,
       env: process.env,
+      detached: true,
     });
     let out = "";
-    const onData = (d) => {
-      out += d.toString();
-      if (/Local:.*5199/.test(out)) resolve({ proc, url: "http://localhost:5199/" });
-    };
+    const onData = (d) => { out += d.toString(); if (out.includes(`:${PORT}`)) resolve(proc); };
     proc.stdout.on("data", onData);
     proc.stderr.on("data", onData);
-    setTimeout(() => reject(new Error("vite did not start in 20s:\n" + out)), 20000);
+    setTimeout(() => reject(new Error("vite did not start:\n" + out)), 20000);
   });
 }
 
-const { proc, url } = await startVite();
+let proc;
 let failed = false;
 try {
+  proc = await startVite();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  const consoleErrors = [];
-  page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
-  page.on("pageerror", (e) => consoleErrors.push("pageerror: " + e.message));
+  page.on("console", (m) => { if (m.type() === "error") console.log("[console.error]", m.text().slice(0, 200)); });
+  page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 200)));
 
-  await page.goto(url, { waitUntil: "networkidle" });
+  await page.goto(URL_, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => window.__gtlua_test?.build, { timeout: 15000 });
 
-  // wait for the test hook to be present
-  await page.waitForFunction(() => window.__gtlua_test?.runCc65, { timeout: 15000 });
+  const HELLO = `function _draw()
+  cls(1)
+  print("hi", 40, 40, 14)
+  circfill(64, 64, 20, 10)
+end`;
 
-  // drive cc65 in the browser on a two-function C unit
-  const result = await page.evaluate(async () => {
-    return await window.__gtlua_test.runCc65("int foo(int x){int y=x*3;return y+1;}\nvoid bar(void){foo(7);}\n");
-  });
+  const result = await page.evaluate(async (src) => {
+    const t0 = performance.now();
+    try {
+      const r = await window.__gtlua_test.build(src);
+      return { ok: r.ok, gtrLen: r.gtr ? r.gtr.byteLength : 0, ms: r.ms, wall: Math.round(performance.now() - t0) };
+    } catch (e) {
+      return { ok: false, buildError: { stage: e.stage, message: e.message, log: (e.log || "").slice(0, 500) } };
+    }
+  }, HELLO);
 
-  console.log("=== browser cc65 result ===");
-  console.log("status:", result.status);
-  console.log("stderr:", (result.stderr || "").slice(0, 200));
-  console.log("output .s length:", result.out ? result.out.length : "(null)");
-  if (result.out) {
-    const hasFoo = result.out.includes("_foo");
-    const hasBar = result.out.includes("_bar");
-    console.log("has _foo:", hasFoo, "| has _bar:", hasBar);
-    console.log("--- first lines ---");
-    console.log(result.out.split("\n").slice(3, 8).join("\n"));
-    if (!hasFoo || !hasBar || result.status !== 0) failed = true;
-  } else {
-    failed = true;
-  }
-
-  if (consoleErrors.length) {
-    console.log("=== console errors ===");
-    consoleErrors.slice(0, 8).forEach((e) => console.log("  ", e.slice(0, 160)));
-  }
+  console.log("=== browser build ===");
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.ok || result.gtrLen !== 32768) failed = true;
 
   await browser.close();
 } catch (e) {
-  console.log("TEST ERROR:", e.message.split("\n")[0]);
+  console.log("TEST ERROR:", (e.message || String(e)).split("\n")[0]);
   failed = true;
 } finally {
-  proc.kill("SIGTERM");
+  if (proc) try { process.kill(-proc.pid, "SIGKILL"); } catch {}
 }
 
-console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - cc65 compiles correctly in the browser");
+console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - .gtr built in the browser worker");
 process.exit(failed ? 1 : 0);

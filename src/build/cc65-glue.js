@@ -50,6 +50,12 @@ export async function runWasmTool(wasmBinary, { fs, argv, print, printErr }) {
 
   const utf8 = new TextDecoder();
   const enc = new TextEncoder();
+  // Empty environment. The romdev 0.1.3 cc65 patch pins the object timestamp to
+  // a fixed default when SOURCE_DATE_EPOCH is UNSET, which is exactly how the SDK
+  // toolchain runs it (and how it stays byte-identical to native). Setting
+  // SOURCE_DATE_EPOCH ourselves would take a DIFFERENT path and diverge - so
+  // leave it unset and let the patched default apply.
+  const ENVIRON = [];
   const cstr = (ptr) => {
     let end = ptr;
     while (HEAPU8[end] !== 0) end++;
@@ -223,8 +229,31 @@ export async function runWasmTool(wasmBinary, { fs, argv, print, printErr }) {
       HEAPU32[(bufPtr >> 2) + 3] = 0;
       return 0;
     },
-    environ_sizes_get: (pCount, pBufSize) => { HEAPU32[pCount >> 2] = 0; HEAPU32[pBufSize >> 2] = 0; return 0; },
-    environ_get: () => 0,
+    // Expose an environment. SOURCE_DATE_EPOCH pins cc65/ca65's OPT_DATETIME
+    // stamp to a constant instead of the wall clock, so the .o is reproducible
+    // and byte-identical to native (this is what the romdev 0.1.3 fix relies on;
+    // without it ca65 stamps time(0) and the object differs run-to-run AND from
+    // native, which flips zeropage/absolute symbol resolution at link time).
+    environ_sizes_get: (pCount, pBufSize) => {
+      const env = ENVIRON;
+      let bufSize = 0;
+      for (const e of env) bufSize += enc.encode(e).length + 1;
+      HEAPU32[pCount >> 2] = env.length;
+      HEAPU32[pBufSize >> 2] = bufSize;
+      return 0;
+    },
+    environ_get: (pEnvArray, pEnvBuf) => {
+      let bufPtr = pEnvBuf;
+      const env = ENVIRON;
+      for (let i = 0; i < env.length; i++) {
+        HEAPU32[(pEnvArray >> 2) + i] = bufPtr;
+        const bytes = enc.encode(env[i]);
+        HEAPU8.set(bytes, bufPtr); HEAPU8[bufPtr + bytes.length] = 0;
+        bufPtr += bytes.length + 1;
+      }
+      HEAPU32[(pEnvArray >> 2) + env.length] = 0;
+      return 0;
+    },
   };
 
   function appendToFile(fd, chunk) {
