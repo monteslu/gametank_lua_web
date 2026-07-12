@@ -10,6 +10,8 @@ import { zipStore, unzip } from "./projects/zip.js";
 import { downloadBytes, pickFile } from "./util/download.js";
 import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
 import { newSheet } from "./gfx/gtg.js";
+import { FrameEditor } from "./gfx/FrameEditor.jsx";
+import { parseGsi, encodeGsi } from "./gfx/gsi.js";
 
 const HELLO = `-- hello: a complete GameTank game. No assets, just code.
 function _draw()
@@ -38,7 +40,8 @@ export function App() {
   const [source, setSource] = useState(HELLO);
   const [projectName, setProjectName] = useState("hello");
   const [sheet, setSheet] = useState(null);      // Uint8Array(16384) or null (no gfx.gtg)
-  const [view, setView] = useState("code");      // "code" | "sprite"
+  const [frames, setFrames] = useState(null);    // array of {vxo,vyo,w,h,gx,gy} or null
+  const [view, setView] = useState("code");      // "code" | "sprite" | "frames"
 
   const [rom, setRom] = useState(null);
   const [building, setBuilding] = useState(false);
@@ -47,6 +50,7 @@ export function App() {
   const buildSeq = useRef(0);
   const saveTimer = useRef(0);
   const sheetSaveTimer = useRef(0);
+  const framesSaveTimer = useRef(0);
 
   // --- projects list + initial project ------------------------------------
   const refreshProjects = useCallback(async () => {
@@ -78,6 +82,8 @@ export function App() {
     setSource(asText(rec.files["main.lua"] ?? ""));
     const g = rec.files["gfx.gtg"];
     setSheet(g ? (g instanceof Uint8Array ? g : new Uint8Array(g)) : null);
+    const gsi = rec.files["gfx.gsi"];
+    setFrames(gsi ? parseGsi(gsi instanceof Uint8Array ? gsi : new Uint8Array(gsi)) : null);
     setView("code");
     setRom(null); setBuildMsg(""); setBuildErr("");
   }, []);
@@ -134,6 +140,30 @@ export function App() {
     refreshProjects();
   }, [currentId, refreshProjects]);
 
+  // frame-table (.gsi) edits: array in, debounced persist as encoded gfx.gsi
+  const onFramesChange = useCallback((arr) => {
+    setFrames(arr);
+    if (!currentId) return;
+    clearTimeout(framesSaveTimer.current);
+    framesSaveTimer.current = setTimeout(async () => {
+      const rec = await getProject(currentId);
+      if (!rec) return;
+      rec.files["gfx.gsi"] = encodeGsi(arr);
+      await saveProject(rec, Date.now());
+      refreshProjects();
+    }, 500);
+  }, [currentId, refreshProjects]);
+
+  const addFrames = useCallback(async () => {
+    setFrames([]); setView("frames");
+    if (!currentId) return;
+    const rec = await getProject(currentId);
+    if (!rec) return;
+    rec.files["gfx.gsi"] = encodeGsi([]);
+    await saveProject(rec, Date.now());
+    refreshProjects();
+  }, [currentId, refreshProjects]);
+
   // --- project ops ---------------------------------------------------------
   const newProject = useCallback(async () => {
     const rec = await createProject("untitled", { "main.lua": "function _draw()\n  cls(0)\nend\n" }, Date.now());
@@ -178,6 +208,7 @@ export function App() {
         // the CLI. A project toggle can set it later; forcing it on would change
         // fixed-point semantics for games that don't expect it.
         sheetBytes: sheet ? sheet.buffer.slice(sheet.byteOffset, sheet.byteOffset + sheet.byteLength) : undefined,
+        framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
         onProgress: (m) => { if (seq === buildSeq.current) setBuildMsg(m); },
       });
       if (seq !== buildSeq.current) return;
@@ -190,7 +221,7 @@ export function App() {
     } finally {
       if (seq === buildSeq.current) setBuilding(false);
     }
-  }, [source, errors.length, sheet]);
+  }, [source, errors.length, sheet, frames]);
 
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
@@ -270,10 +301,13 @@ export function App() {
               {sheet
                 ? <button className={"tab " + (view === "sprite" ? "sel" : "")} onClick={() => setView("sprite")}>gfx.gtg</button>
                 : <button className="tab add" onClick={addSheet} title="add a sprite sheet">+ sprites</button>}
+              {frames
+                ? <button className={"tab " + (view === "frames" ? "sel" : "")} onClick={() => setView("frames")}>gfx.gsi</button>
+                : sheet && <button className="tab add" onClick={addFrames} title="add a frame table (sprf animation)">+ frames</button>}
             </div>
-            {view === "code"
-              ? <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />
-              : <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
+            {view === "code" && <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />}
+            {view === "sprite" && <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
+            {view === "frames" && <FrameEditor sheet={sheet} frames={frames || []} onChange={onFramesChange} />}
           </section>
 
           <section className="pane emu-pane">
