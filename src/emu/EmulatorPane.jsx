@@ -45,15 +45,23 @@ export function EmulatorPane({ rom }) {
     };
   }, [rom]);
 
-  // keyboard input while the pane is focused/hovered
+  // Gamepad keyboard input, but ONLY when the emulator area actually holds focus
+  // - otherwise a global listener would preventDefault() arrows/Enter/Z/X/C and
+  // break the code editor (Enter = no newline, etc.). The screen is focusable
+  // (tabIndex) and you click it to "grab" the controls; a small hint says so.
+  const [focused, setFocused] = useState(false);
+  const screenRef = useRef(null);
   useEffect(() => {
+    const active = () => screenRef.current && screenRef.current.contains(document.activeElement);
     const down = (e) => {
+      if (!active()) return;
       const id = KEYMAP[e.code];
       if (id === undefined) return;
       e.preventDefault();
       hostRef.current?.setPad(id, true);
     };
     const up = (e) => {
+      if (!active()) return;
       const id = KEYMAP[e.code];
       if (id === undefined) return;
       hostRef.current?.setPad(id, false);
@@ -65,7 +73,14 @@ export function EmulatorPane({ rom }) {
 
   return (
     <div className="emu">
-      <div className="emu-screen">
+      <div
+        className={"emu-screen" + (focused ? " focused" : "")}
+        ref={screenRef}
+        tabIndex={0}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onMouseDown={() => screenRef.current?.focus()}
+      >
         {/* canvas is native 128x128; CSS scales it up with pixelated rendering */}
         <canvas ref={canvasRef} className="emu-canvas" width={128} height={128} />
         {status !== "running" && (
@@ -75,10 +90,15 @@ export function EmulatorPane({ rom }) {
             {status === "error" && <span className="err">emulator error: {error}</span>}
           </div>
         )}
+        {status === "running" && !focused && (
+          <div className="emu-clickhint">click to play</div>
+        )}
       </div>
       <div className="emu-controls">
         <button onClick={() => hostRef.current?.reset()} disabled={status !== "running"}>reset</button>
-        <span className="emu-hint">arrows move · Z/X/C = A/B/C · Enter = start</span>
+        <span className="emu-hint">
+          {focused ? "arrows move · Z/X/C = A/B/C · Enter = start" : "click the screen to use the controls"}
+        </span>
       </div>
     </div>
   );
