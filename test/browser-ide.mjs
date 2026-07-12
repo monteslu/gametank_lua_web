@@ -40,7 +40,7 @@ try {
   const orbitBtn = page.locator(".side-item.example", { hasText: "orbit" });
   await orbitBtn.click();
   await page.waitForFunction(() => document.querySelector(".proj-name")?.value === "orbit", { timeout: 5000 });
-  const editorHasOrbit = await page.evaluate(() => (document.querySelector(".code")?.value || "").includes("_update") || (document.querySelector(".code")?.value || "").length > 200);
+  const editorHasOrbit = await page.evaluate(() => { const s = window.__gtlua_test.getSource() || ""; return s.includes("_update") || s.length > 200; });
   check("forking orbit opened it", editorHasOrbit);
 
   // Play the forked project -> emulator runs

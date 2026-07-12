@@ -6,5 +6,9 @@ import { buildGtr } from "./build-client.js";
 if (typeof window !== "undefined") {
   window.__gtlua_test = {
     build(source, opts = {}) { return buildGtr(source, opts); },
+    // App registers these so tests can drive the (Monaco) editor's model without
+    // poking DOM internals.
+    setSource: null,   // (text) => void
+    getSource: null,   // () => string
   };
 }

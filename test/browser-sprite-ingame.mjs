@@ -48,12 +48,7 @@ try {
   // point main.lua at the sprite: draw cell 0 big and centered-ish
   await page.click(".pane-tabs .tab >> text=main.lua");
   const code = 'function _draw()\n  cls(0)\n  spr(0, 60, 60)\n  spr(0, 60, 60, 2, 2)\nend\n';
-  await page.evaluate((c) => {
-    const ta = document.querySelector(".code");
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-    setter.call(ta, c);
-    ta.dispatchEvent(new Event("input", { bubbles: true }));
-  }, code);
+  await page.evaluate((c) => window.__gtlua_test.setSource(c), code);
   await page.waitForTimeout(700);   // let autosave + recompile settle
 
   // build & run

@@ -15,11 +15,7 @@ function startVite() {
   });
 }
 
-const setCode = (page, c) => page.evaluate((code) => {
-  const ta = document.querySelector(".code");
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-  setter.call(ta, code); ta.dispatchEvent(new Event("input", { bubbles: true }));
-}, c);
+const setCode = (page, c) => page.evaluate((code) => window.__gtlua_test.setSource(code), c);
 
 let proc, failed = false;
 const check = (n, c) => { console.log((c ? "  ok " : "FAIL ") + n); if (!c) failed = true; };

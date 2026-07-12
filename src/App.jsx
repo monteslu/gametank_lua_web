@@ -1,6 +1,8 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect, Suspense } from "react";
 import { compile } from "gtlua/compiler/index.js";
-import { Editor } from "./Editor.jsx";
+// Monaco is heavy (~2.8MB); lazy-load the editor so the app shell + emulator
+// paint immediately and Monaco streams in behind a Suspense fallback.
+const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m.Editor })));
 import { buildGtr } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { Sidebar } from "./projects/Sidebar.jsx";
@@ -113,6 +115,13 @@ export function App() {
       refreshProjects();
     }, 500);
   }, [currentId, refreshProjects]);
+
+  // expose editor set/get for the test harness (Monaco has no plain textarea)
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.__gtlua_test) return;
+    window.__gtlua_test.setSource = (t) => onChange(t);
+    window.__gtlua_test.getSource = () => source;
+  }, [onChange, source]);
 
   // sprite-sheet edits: immutable buffer in, debounced persist as gfx.gtg
   const onSheetChange = useCallback((buf) => {
@@ -305,7 +314,11 @@ export function App() {
                 ? <button className={"tab " + (view === "frames" ? "sel" : "")} onClick={() => setView("frames")}>gfx.gsi</button>
                 : sheet && <button className="tab add" onClick={addFrames} title="add a frame table (sprf animation)">+ frames</button>}
             </div>
-            {view === "code" && <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />}
+            {view === "code" && (
+              <Suspense fallback={<div className="editor-loading">loading editor…</div>}>
+                <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />
+              </Suspense>
+            )}
             {view === "sprite" && <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
             {view === "frames" && <FrameEditor sheet={sheet} frames={frames || []} onChange={onFramesChange} />}
           </section>
