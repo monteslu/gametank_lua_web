@@ -83,3 +83,17 @@ const sdkManifest = {
 };
 await writeFile(path.join(SDK_OUT, "manifest.json"), JSON.stringify(sdkManifest));
 console.log("staged SDK runtime -> public/sdk (" + sdkFiles.length + " files, " + sdkManifest.cUnits.length + " C + " + sdkManifest.asmUnits.length + " asm units)");
+
+// ---- stage the GameTank emulator core -> public/core ----------------------
+// The libretro core's glue .js + .wasm, so the browser emulator pane can load
+// and run the built .gtr. The glue is node-targeted (-sENVIRONMENT=node); the
+// browser host fetches the text and flips the env flags (same trick the cc65
+// path uses), so we ship the glue verbatim.
+const CORE_PKG = path.dirname(require.resolve("romdev-core-gametank", { paths: [GTLUA, HERE] }));
+const CORE_OUT = path.join(HERE, "public", "core");
+await rm(CORE_OUT, { recursive: true, force: true });
+await mkdir(CORE_OUT, { recursive: true });
+for (const f of ["gametank_libretro.js", "gametank_libretro.wasm"]) {
+  await cp(path.join(CORE_PKG, "wasm", f), path.join(CORE_OUT, f));
+}
+console.log("staged GameTank core -> public/core (gametank_libretro.js + .wasm)");

@@ -25,10 +25,26 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-s
 .logo .dim { color: var(--dim); font-weight: 400; }
 .status { font-size: 12px; color: var(--ok); }
 .status.err { color: var(--err); }
+.build-msg { font: 12px/1 var(--mono); color: var(--dim); margin-left: auto; }
+.build-msg .err { color: var(--err); }
 
-.panes { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.play {
+  font: 600 13px/1 system-ui, sans-serif; color: #06121a; background: var(--accent);
+  border: 0; border-radius: 5px; padding: 7px 14px; cursor: pointer;
+}
+.play:hover:not(:disabled) { filter: brightness(1.1); }
+.play:disabled { opacity: 0.45; cursor: default; }
+
+/* editor spans the left; emulator top-right, problems bottom-right */
+.panes {
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: 1fr 440px;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
 .pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
-.pane:last-child { border-right: none; }
+.editor-pane { grid-column: 1; grid-row: 1 / span 2; }
+.emu-pane { grid-column: 2; grid-row: 1; border-right: none; }
+.output-pane { grid-column: 2; grid-row: 2; border-right: none; border-top: 1px solid var(--line); }
 .pane-title {
   padding: 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
   color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line);
@@ -52,13 +68,40 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-s
 
 /* output */
 .output-pane { overflow: hidden; }
-.problems { list-style: none; margin: 0; padding: 6px 0; max-height: 40%; overflow: auto; font: 12px/1.5 var(--mono); }
+.problems { list-style: none; margin: 0; padding: 6px 0; overflow: auto; font: 12px/1.5 var(--mono); flex: 1; min-height: 0; }
 .problems li { padding: 2px 12px; }
 .problems li.ok { color: var(--ok); }
 .problems li.error { color: var(--err); }
 .problems li.warning { color: var(--warn); }
 .problems .loc { color: var(--dim); margin-right: 8px; }
-.genc {
-  flex: 1; margin: 0; padding: 8px 12px; overflow: auto; min-height: 0;
-  font: 12px/1.5 var(--mono); color: #9fb3c8; background: #0f1117; white-space: pre;
+
+/* emulator */
+.emu { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0b0d12; }
+.emu-screen {
+  flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+  min-height: 0; padding: 12px; overflow: hidden;
 }
+.emu-canvas {
+  /* native 128x128 upscaled with crisp square pixels (integer-ish; the largest
+     whole multiple is enforced by the square aspect + contained sizing) */
+  image-rendering: pixelated;
+  width: min(100%, 512px); height: auto; aspect-ratio: 1 / 1;
+  background: #000; display: block;
+}
+.emu-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 16px; text-align: center; font: 12px/1.4 var(--mono); color: var(--dim);
+  background: rgba(11,13,18,0.72);
+}
+.emu-overlay.error { color: var(--err); }
+.emu-overlay .err { color: var(--err); }
+.emu-controls {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+.emu-controls button {
+  font: 12px system-ui, sans-serif; color: var(--fg); background: #262b36;
+  border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+}
+.emu-controls button:disabled { opacity: 0.4; cursor: default; }
+.emu-hint { font: 11px var(--mono); color: var(--dim); }

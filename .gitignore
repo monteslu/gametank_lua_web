@@ -3,3 +3,5 @@ dist/
 *.log
 public/cc65/
 public/sdk/
+public/core/
+test/*.png
