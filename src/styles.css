@@ -144,6 +144,8 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-s
   border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer;
 }
 .sprite-toolbar .tool.sel { background: var(--accent); color: #06121a; border-color: var(--accent); }
+.sprite-toolbar .tool.import { color: var(--accent); border-color: var(--accent); }
+.sprite-toolbar .import-msg { font: 11px var(--mono); color: var(--ok); }
 .sprite-toolbar .tb-sep { flex: 1; }
 .sprite-toolbar .zoom { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--dim); }
 .sprite-body { flex: 1; display: flex; min-height: 0; overflow: auto; }

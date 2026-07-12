@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { SHEET_DIM, getPixel, setPixel } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
+import { pngToSheet } from "./png-import.js";
+import { pickFile } from "../util/download.js";
 
 const TOOLS = ["pencil", "eraser", "fill", "line", "rect"];
 
@@ -135,6 +137,21 @@ export function SpriteEditor({ sheet, onChange }) {
     return () => window.removeEventListener("mouseup", onUp);
   }, []);
 
+  const [importMsg, setImportMsg] = useState("");
+  const importPng = useCallback(async () => {
+    const picked = await pickFile(".png,image/png");
+    if (!picked) return;
+    try {
+      const { sheet: next, width, height, cropped } = await pngToSheet(picked.bytes);
+      onChange(next);
+      setImportMsg(`imported ${width}×${height}${cropped ? " (cropped to 128×128)" : ""}`);
+      setTimeout(() => setImportMsg(""), 4000);
+    } catch (e) {
+      setImportMsg(`import failed: ${e.message}`);
+      setTimeout(() => setImportMsg(""), 4000);
+    }
+  }, [onChange]);
+
   return (
     <div className="sprite-editor">
       <div className="sprite-toolbar">
@@ -142,6 +159,8 @@ export function SpriteEditor({ sheet, onChange }) {
           <button key={t} className={"tool " + (tool === t ? "sel" : "")} onClick={() => setTool(t)}>{t}</button>
         ))}
         <span className="tb-sep" />
+        {importMsg && <span className="import-msg">{importMsg}</span>}
+        <button className="tool import" onClick={importPng} title="import a PNG (nearest-color to the GameTank palette)">import PNG</button>
         <label className="zoom">zoom
           <input type="range" min="2" max="10" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
           {zoom}x
