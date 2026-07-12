@@ -28,12 +28,60 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-s
 .build-msg { font: 12px/1 var(--mono); color: var(--dim); margin-left: auto; }
 .build-msg .err { color: var(--err); }
 
+.proj-name {
+  font: 13px system-ui, sans-serif; color: var(--fg); background: #12151c;
+  border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 150px;
+}
+.proj-name:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
 .play {
   font: 600 13px/1 system-ui, sans-serif; color: #06121a; background: var(--accent);
   border: 0; border-radius: 5px; padding: 7px 14px; cursor: pointer;
 }
 .play:hover:not(:disabled) { filter: brightness(1.1); }
 .play:disabled { opacity: 0.45; cursor: default; }
+
+.tb-btn {
+  font: 12px system-ui, sans-serif; color: var(--fg); background: #262b36;
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer;
+}
+.tb-btn:hover:not(:disabled) { background: #2f3542; }
+.tb-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* body = sidebar + panes */
+.body { flex: 1; display: flex; min-height: 0; }
+
+/* sidebar (project explorer) */
+.sidebar {
+  width: 210px; flex: 0 0 210px; display: flex; flex-direction: column;
+  background: var(--panel); border-right: 1px solid var(--line); overflow: auto;
+}
+.side-section { border-bottom: 1px solid var(--line); }
+.side-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim);
+}
+.side-actions { display: flex; gap: 4px; }
+.side-actions button {
+  width: 20px; height: 20px; line-height: 1; padding: 0; color: var(--fg);
+  background: #262b36; border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
+}
+.side-list { list-style: none; margin: 0; padding: 2px 0 8px; }
+.side-list li { display: flex; align-items: stretch; }
+.side-list li.active { background: #232936; }
+.side-list li.empty { padding: 4px 12px; color: var(--dim); font-size: 12px; }
+.side-item {
+  flex: 1; text-align: left; padding: 5px 10px; color: var(--fg); background: none;
+  border: 0; cursor: pointer; font: 13px system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis;
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+}
+.side-item:hover { background: #232936; }
+.side-item.example { color: var(--accent); }
+.side-blurb { font: 11px var(--mono); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-del {
+  width: 24px; color: var(--dim); background: none; border: 0; cursor: pointer; font-size: 15px;
+}
+.side-del:hover { color: var(--err); }
 
 /* editor spans the left; emulator top-right, problems bottom-right */
 .panes {

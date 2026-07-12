@@ -97,3 +97,29 @@ for (const f of ["gametank_libretro.js", "gametank_libretro.wasm"]) {
   await cp(path.join(CORE_PKG, "wasm", f), path.join(CORE_OUT, f));
 }
 console.log("staged GameTank core -> public/core (gametank_libretro.js + .wasm)");
+
+// ---- stage the SDK's example games -> public/examples ---------------------
+// The forkable seed set. Each example is (for now) a lone main.lua; the
+// manifest lists them + a short blurb so the IDE can show a gallery without
+// hardcoding the Lua in JS. Sourced from the package = one source of truth.
+const EX_SRC = path.join(GTLUA, "examples");
+const EX_OUT = path.join(HERE, "public", "examples");
+const EX_META = {
+  hello: "A smiley + text. The zero-asset starting point.",
+  orbit: "Bouncing bodies with fixed-point math.",
+  "pad-square": "Move a square with the d-pad. Input demo.",
+  audio: "Built-in SFX and music.",
+  mathcheck: "Fixed-point math self-test.",
+};
+await rm(EX_OUT, { recursive: true, force: true });
+await mkdir(EX_OUT, { recursive: true });
+const examples = [];
+for (const name of Object.keys(EX_META)) {
+  const src = path.join(EX_SRC, name, "main.lua");
+  if (!existsSync(src)) continue;
+  await mkdir(path.join(EX_OUT, name), { recursive: true });
+  await cp(src, path.join(EX_OUT, name, "main.lua"));
+  examples.push({ name, blurb: EX_META[name], files: ["main.lua"] });
+}
+await writeFile(path.join(EX_OUT, "manifest.json"), JSON.stringify({ examples }));
+console.log("staged examples -> public/examples (" + examples.map((e) => e.name).join(", ") + ")");
