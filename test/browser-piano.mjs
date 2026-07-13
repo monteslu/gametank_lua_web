@@ -62,6 +62,29 @@ try {
   const cellText = await page.evaluate(() => document.querySelector(".mg-cell.on")?.textContent);
   check("grid cell uses the piano-selected note (G4)", cellText === "G4");
 
+  // --- computer-keyboard note shortcuts (base octave = 4) ---
+  // click somewhere neutral to move focus off any input first
+  await page.locator(".music-grid").click({ position: { x: 5, y: 5 } });
+  const noteReadout = () => page.evaluate(() => document.querySelector(".mpb-label b")?.textContent);
+
+  await page.keyboard.press("KeyZ");           // C of base octave (4)
+  await page.waitForTimeout(100);
+  check("Z plays C4 (base octave)", (await noteReadout()) === "C4");
+
+  await page.keyboard.press("KeyS");           // C#4
+  await page.waitForTimeout(100);
+  check("S plays C#4 (a sharp)", (await noteReadout()) === "C#4");
+
+  await page.keyboard.press("KeyQ");           // C one octave up (C5)
+  await page.waitForTimeout(100);
+  check("Q plays C5 (octave up)", (await noteReadout()) === "C5");
+
+  await page.keyboard.press("BracketRight");   // octave up -> base 5
+  await page.waitForTimeout(100);
+  await page.keyboard.press("KeyZ");           // now C5
+  await page.waitForTimeout(100);
+  check("] raises the octave (Z now plays C5)", (await noteReadout()) === "C5");
+
   await browser.close();
 } catch (e) {
   console.log("TEST ERROR:", (e.message || String(e)).split("\n")[0]);

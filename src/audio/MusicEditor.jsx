@@ -16,6 +16,18 @@ for (let oct = 2; oct <= 6; oct++) {
 }
 const CH_COLORS = ["#ff7ac6", "#57e2e5", "#ffd45e", "#b48cff"];
 
+// Computer-keyboard -> note, the tracker/DAW layout (Renoise/FL/LMMS style):
+// the Z row is the base octave, the Q row is one octave up. Value = semitone
+// offset from the base octave's C. code -> semitone.
+const KEY_SEMITONE = {
+  // Z row (base octave)
+  KeyZ: 0, KeyS: 1, KeyX: 2, KeyD: 3, KeyC: 4, KeyV: 5, KeyG: 6, KeyB: 7,
+  KeyH: 8, KeyN: 9, KeyJ: 10, KeyM: 11, Comma: 12, KeyL: 13, Period: 14, Semicolon: 15, Slash: 16,
+  // Q row (one octave up)
+  KeyQ: 12, Digit2: 13, KeyW: 14, Digit3: 15, KeyE: 16, KeyR: 17, Digit5: 18, KeyT: 19,
+  Digit6: 20, KeyY: 21, Digit7: 22, KeyU: 23, KeyI: 24, Digit9: 25, KeyO: 26, Digit0: 27, KeyP: 28,
+};
+
 /**
  * Step tracker for a .gtm2 song. The song is a { steps, delay, instruments,
  * grid } model where grid[step][ch] = note (1-based MIDI, 0/undefined = empty).
@@ -28,6 +40,9 @@ export function MusicEditor({ song, onChange }) {
   const [playing, setPlaying] = useState(false);
   const [playRow, setPlayRow] = useState(-1);
   const [pitch, setPitch] = useState(noteNum("c4"));
+  const [baseOctave, setBaseOctave] = useState(4);   // Z row = this octave's C
+  const rootRef = useRef(null);
+  const heldKeys = useRef(new Set());
 
   useEffect(() => {
     preview.current = new FmPreview();
@@ -45,6 +60,33 @@ export function MusicEditor({ song, onChange }) {
   const previewNote = useCallback((midi) => {
     if (!playing) preview.current?.playNote(model.instruments[0] ?? 0, midi);
   }, [playing, model.instruments]);
+
+  // Computer-keyboard note playing: Z/Q rows play notes (set the current pitch +
+  // preview), Z/X (octave down/up)... actually X is a note, so use the bracket
+  // keys and the number-pad-free [ ] for octave. Only active when the music
+  // editor is focused/hovered and you're not typing in a field.
+  useEffect(() => {
+    const editing = () => {
+      const el = document.activeElement;
+      return el && (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    };
+    const onDown = (e) => {
+      if (editing() || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "BracketLeft") { setBaseOctave((o) => Math.max(1, o - 1)); e.preventDefault(); return; }
+      if (e.code === "BracketRight") { setBaseOctave((o) => Math.min(7, o + 1)); e.preventDefault(); return; }
+      const semi = KEY_SEMITONE[e.code];
+      if (semi === undefined) return;
+      if (heldKeys.current.has(e.code)) { e.preventDefault(); return; }   // ignore auto-repeat
+      heldKeys.current.add(e.code);
+      const midi = noteNum("c" + baseOctave) + semi;
+      if (midi >= 1 && midi <= 128) { setPitch(midi); previewNote(midi); }
+      e.preventDefault();
+    };
+    const onUp = (e) => { heldKeys.current.delete(e.code); };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); heldKeys.current.clear(); };
+  }, [baseOctave, previewNote]);
   const setInstrument = (ch, index) => {
     const instruments = model.instruments.slice();
     instruments[ch] = index;
@@ -155,8 +197,11 @@ export function MusicEditor({ song, onChange }) {
 
       {/* piano note picker - the note placed when you click a grid cell */}
       <div className="music-piano-bar">
-        <span className="mpb-label">note <b>{nameOf(pitch)}</b></span>
-        <Piano value={pitch} onChange={setPitch} onPreview={previewNote} />
+        <div className="mpb-info">
+          <span className="mpb-label">note <b>{nameOf(pitch)}</b></span>
+          <span className="mpb-kbd">play with the keyboard: Z/S/X… row = oct {baseOctave}, Q/2/W… = oct {baseOctave + 1} · [ ] change octave</span>
+        </div>
+        <Piano value={pitch} onChange={setPitch} onPreview={previewNote} baseOctave={baseOctave} />
       </div>
 
       {/* channel headers with instrument pickers */}

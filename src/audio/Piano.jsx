@@ -15,14 +15,16 @@ const BLACK_OFFSET = 0.68;
  * @param {{ value:number, onChange:(midi:number)=>void, onPreview?:(midi:number)=>void,
  *           fromOct?:number, toOct?:number }} props
  */
-export function Piano({ value, onChange, onPreview, fromOct = 2, toOct = 6 }) {
+export function Piano({ value, onChange, onPreview, fromOct = 2, toOct = 6, baseOctave = null }) {
   const whites = [];
   const blacks = [];
   let wi = 0;
   for (let oct = fromOct; oct <= toOct; oct++) {
     for (const w of WHITE) {
       const midi = noteNum(w + oct);
-      whites.push({ midi, name: w.toUpperCase() + oct, index: wi });
+      // mark the two octaves the computer keyboard plays (base + base+1)
+      const kbd = baseOctave != null && (oct === baseOctave || oct === baseOctave + 1);
+      whites.push({ midi, name: w.toUpperCase() + oct, index: wi, kbd });
       const sharp = BLACK[w];
       if (sharp && !(w === "b") && !(oct === toOct && w === "b")) {
         blacks.push({ midi: noteNum(sharp + oct), name: sharp.toUpperCase() + oct, whiteIndex: wi });
@@ -40,7 +42,7 @@ export function Piano({ value, onChange, onPreview, fromOct = 2, toOct = 6 }) {
         {whites.map((k) => (
           <button
             key={k.midi}
-            className={"pk-white" + (k.midi === value ? " sel" : "")}
+            className={"pk-white" + (k.midi === value ? " sel" : "") + (k.kbd ? " kbd" : "")}
             title={k.name}
             aria-label={k.name}
             onClick={() => pick(k.midi)}
