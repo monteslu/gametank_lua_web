@@ -43,6 +43,22 @@ try {
   const onCells = await page.evaluate(() => document.querySelectorAll(".mg-cell.on").length);
   check("notes placed in the grid", onCells === 3);
 
+  // long songs: steps can exceed the old 64 cap, and ONLY the rows scroll (the
+  // channel headers + piano bar stay pinned above them).
+  const stepsInput = page.locator('.music-toolbar .m-field input[type="number"]').nth(1);
+  await stepsInput.fill("100"); await stepsInput.press("Enter");
+  await page.waitForTimeout(250);
+  check("steps can exceed the old 64 cap", (await page.locator(".music-grid .mg-row").count()) === 100);
+  const beforeTop = await page.evaluate(() => document.querySelector(".music-heads").getBoundingClientRect().top);
+  await page.evaluate(() => { document.querySelector(".music-grid").scrollTop = 300; });
+  await page.waitForTimeout(120);
+  const afterTop = await page.evaluate(() => document.querySelector(".music-heads").getBoundingClientRect().top);
+  const scrolled = await page.evaluate(() => document.querySelector(".music-grid").scrollTop > 0);
+  check("headers stay pinned while only the rows scroll", scrolled && Math.abs(afterTop - beforeTop) < 1);
+  // reset to 16 for the rest of the test
+  await stepsInput.fill("16"); await stepsInput.press("Enter");
+  await page.waitForTimeout(150);
+
   // the grid -> .gtm2 encode is valid (round-trips through the SDK parser)
   const gtm2ok = await page.evaluate(async () => {
     const { songToBytes } = await import("/src/audio/MusicEditor.jsx");

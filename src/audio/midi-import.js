@@ -7,6 +7,7 @@
 // SMF layout: "MThd" <len:4> <format:2> <ntracks:2> <division:2>, then ntracks x
 // ("MTrk" <len:4> <events>). Events use variable-length delta times; we read
 // note-on (0x90, vel>0) and note-off (0x80, or 0x90 vel 0).
+import { MAX_STEPS } from "./gtm2.js";
 
 function readVarLen(buf, p) {
   let value = 0, byte;
@@ -71,7 +72,7 @@ export function parseMidi(buf) {
  * channels round-robin (keeping a note's own channel together where possible).
  * @returns the tracker model { steps, delay, instruments, grid }
  */
-export function midiToSong(buf, { stepsPerBeat = 4, maxSteps = 64, instruments = [0, 8, 2, 3] } = {}) {
+export function midiToSong(buf, { stepsPerBeat = 4, maxSteps = MAX_STEPS, instruments = [0, 8, 2, 3] } = {}) {
   const { division, notes } = parseMidi(buf);
   if (!notes.length) throw new Error("no notes found in the MIDI");
   const ticksPerStep = Math.max(1, Math.round(division / stepsPerBeat));

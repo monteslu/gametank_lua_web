@@ -9,6 +9,11 @@ import { parseGtm2, noteNum, INSTRUMENTS, NUM_INSTR, CFG_VELOCITY } from "gtlua/
 
 export { parseGtm2, noteNum, INSTRUMENTS, NUM_INSTR, CFG_VELOCITY };
 
+// Max steps in the tracker GRID. The GameTank .gtm2 format itself has no length
+// cap (the player streams a ROM pointer to a terminator), but the DOM grid needs
+// a sane bound; 256 = 16 bars at 16 steps/bar, plenty for real imported songs.
+export const MAX_STEPS = 256;
+
 // instrument index list for a picker (name -> index), de-duped to canonical names
 export const INSTRUMENT_LIST = [
   "PIANO", "GUITAR", "BASS", "SNARE", "SITAR", "HORN", "BELL", "BLIP", "CHIP", "CHIP2",
@@ -102,7 +107,7 @@ export function gtm2ToModel(bytes) {
     }
     placed.push({ step, notes });
   }
-  const steps = Math.max(4, Math.min(64, (placed.length ? placed[placed.length - 1].step : 0) + 1));
+  const steps = Math.max(4, Math.min(MAX_STEPS, (placed.length ? placed[placed.length - 1].step : 0) + 1));
   const grid = Array.from({ length: steps }, () => [0, 0, 0, 0]);
   for (const p of placed) if (p.step < steps) grid[p.step] = p.notes;
   return { steps, delay: unit, velocity: !!song.velocity, instruments: song.instruments.slice(0, 4), grid };

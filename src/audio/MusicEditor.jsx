@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { INSTRUMENT_LIST, encodeGtm2, noteNum, gtm2ToModel } from "./gtm2.js";
+import { INSTRUMENT_LIST, encodeGtm2, noteNum, gtm2ToModel, MAX_STEPS } from "./gtm2.js";
 import { FmPreview } from "./fm-preview.js";
 import { midiToSong } from "./midi-import.js";
 import { pickFile, downloadBytes } from "../util/download.js";
@@ -54,7 +54,19 @@ export function MusicEditor({ song, onChange }) {
   const [cursor, setCursor] = useState({ step: 0, ch: 0 });   // edit cursor
   const [vel, setVel] = useState(DEFAULT_VEL);       // velocity for placed notes
   const rootRef = useRef(null);
+  const gridRef = useRef(null);
   const heldKeys = useRef(new Set());
+
+  // keep the playing / cursor row visible in the scrolling grid (songs can be
+  // up to MAX_STEPS rows now, taller than the pane).
+  const scrollRowIntoView = useCallback((s) => {
+    const grid = gridRef.current;
+    if (!grid || s < 0) return;
+    const row = grid.children[s];
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
+  }, []);
+  useEffect(() => { if (playRow >= 0) scrollRowIntoView(playRow); }, [playRow, scrollRowIntoView]);
+  useEffect(() => { scrollRowIntoView(cursor.step); }, [cursor.step, scrollRowIntoView]);
 
   useEffect(() => {
     preview.current = new FmPreview();
@@ -153,7 +165,7 @@ export function MusicEditor({ song, onChange }) {
     onChange({ ...model, instruments });
   };
   const setSteps = (steps) => {
-    steps = Math.max(4, Math.min(64, steps | 0));
+    steps = Math.max(4, Math.min(MAX_STEPS, steps | 0));
     const grid = [];
     for (let i = 0; i < steps; i++) grid.push(model.grid[i] ? model.grid[i].slice() : [0, 0, 0, 0]);
     onChange({ ...model, steps, grid });
@@ -247,7 +259,7 @@ export function MusicEditor({ song, onChange }) {
           <input type="number" min="2" max="60" value={model.delay} onChange={(e) => setDelay(+e.target.value)} />
         </label>
         <label className="m-field">steps
-          <input type="number" min="4" max="64" value={model.steps} onChange={(e) => setSteps(+e.target.value)} />
+          <input type="number" min="4" max={MAX_STEPS} value={model.steps} onChange={(e) => setSteps(+e.target.value)} />
         </label>
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
@@ -286,8 +298,8 @@ export function MusicEditor({ song, onChange }) {
         ))}
       </div>
 
-      {/* the step grid */}
-      <div className="music-grid">
+      {/* the step grid (only this scrolls; headers/piano stay pinned) */}
+      <div className="music-grid" ref={gridRef}>
         {model.grid.slice(0, model.steps).map((row, s) => (
           <div key={s} className={"mg-row " + (s === playRow ? "playhead" : "") + (s % 4 === 0 ? " beat" : "")}>
             <div className="mg-step">{s}</div>
