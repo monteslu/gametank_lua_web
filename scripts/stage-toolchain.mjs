@@ -129,8 +129,9 @@ for (const ex of EX_LIST) {
   await mkdir(path.join(EX_OUT, ex.name), { recursive: true });
   await cp(src, path.join(EX_OUT, ex.name, "main.lua"));
   const files = ["main.lua"];
-  // an example may ship a sprite sheet + frame table; carry them along
-  for (const asset of ["gfx.gtg", "gfx.gsi"]) {
+  // an example may ship a sprite sheet, frame table, and/or tracker song so those
+  // editors open populated; carry them along.
+  for (const asset of ["gfx.gtg", "gfx.gsi", "music.json"]) {
     if (existsSync(path.join(dir, asset))) {
       await cp(path.join(dir, asset), path.join(EX_OUT, ex.name, asset));
       files.push(asset);
