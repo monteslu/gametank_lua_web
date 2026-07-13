@@ -45,22 +45,6 @@ body {
 .build-msg { font: 12px/1 var(--mono); color: var(--dim); margin-left: auto; }
 .build-msg .err { color: var(--err); }
 
-/* the project name: reads as a title, edits in place (pencil = the hint) */
-.proj-name-wrap {
-  display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px;
-  background: transparent; border: 1px solid transparent; border-radius: var(--radius);
-}
-.proj-name-wrap .ti-pencil { font-size: 12px; color: var(--grape); }
-.proj-name-wrap:hover, .proj-name-wrap:focus-within {
-  background: #12151c; border-color: var(--line);
-}
-.proj-name-wrap:focus-within { border-color: var(--accent); }
-.proj-name {
-  font: 700 13px system-ui, sans-serif; color: var(--fg); background: transparent;
-  border: 0; outline: none; padding: 5px 4px; width: 150px;
-}
-.proj-name:disabled { color: var(--dim); font-weight: 400; }
-
 .play {
   font: 800 13px/1 system-ui, sans-serif; color: #2a0b1e;
   background: linear-gradient(180deg, #ffa3d6, var(--accent));

@@ -5,7 +5,7 @@ import React from "react";
 // add build knobs (num8). This tab is the friendly front-end for that file - a
 // beginner sets a title and flips "smaller/faster numbers" without hand-editing
 // JSON. `project` is the parsed manifest; onChange gets the updated object.
-export function ProjectSettings({ project, onChange, projectName }) {
+export function ProjectSettings({ project, onChange, projectName, onRename }) {
   const p = project || {};
   const set = (k, v) => {
     const next = { ...p };
@@ -22,6 +22,16 @@ export function ProjectSettings({ project, onChange, projectName }) {
           Saved as <code>project.json</code> - the same project file the GameTank
           C SDK uses. Exports and forks carry it along.
         </p>
+
+        <label className="settings-field">
+          <span className="settings-label">Project name</span>
+          <input
+            type="text"
+            value={projectName ?? ""}
+            onChange={(e) => onRename?.(e.target.value)}
+          />
+          <span className="settings-hint">how it appears in the projects list</span>
+        </label>
 
         <label className="settings-field">
           <span className="settings-label">Title</span>
