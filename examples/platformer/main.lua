@@ -1,9 +1,10 @@
--- platformer: HOP QUEST - run and jump across platforms.
+-- platformer: HOP QUEST - run and jump across a scrolling world.
 --   d-pad L/R  move        A (Z)  jump
--- Reach the gold flag on the right to advance; touch a red spike or fall off the
--- bottom and you respawn. Gravity, ground/platform collision, coyote-ish jump.
--- SFX on jump / land / win, plus background music. The hero is an 8x8 sprite
--- (cell 0 faces right, cell 1 faces left). gt-lua: integer positions, boolean
+-- The level is three screens wide (384px); camera() follows the hero. Reach
+-- the gold flag at the far right; touch a red spike or fall off the bottom and
+-- you respawn. Gravity, ground/platform collision, coyote-ish jump. SFX on
+-- jump / land / win, plus background music. The hero is an 8x8 sprite (cell 0
+-- faces right, cell 1 faces left). gt-lua: integer positions, boolean
 -- conditions.
 
 -- player (integers for pixel-perfect platforming)
@@ -15,14 +16,17 @@ local on_ground = 0
 local face = 1
 local won = 0
 
--- platforms: parallel byte arrays x, y, w  (each a horizontal ledge, h = 4)
--- (constant array sizes; a small hand-placed level)
-local plx = array8(6)
-local ply = array8(6)
-local plw = array8(6)
+-- the world is 3 screens wide; the camera follows the hero across it
+local WORLD = 384
 
--- spikes: x positions on the ground
-local spx = array8(3)
+-- platforms: parallel arrays x, y, w (each a horizontal ledge, h = 4).
+-- x is a full int (world coords go past 255); y/w fit bytes.
+local plx = array(13)
+local ply = array8(13)
+local plw = array8(13)
+
+-- spikes: x positions on the ground (world coords, so ints)
+local spx = array(10)
 
 local col_sky, col_ground, col_plat, col_spike, col_flag
 
@@ -34,17 +38,31 @@ function _init()
   col_spike  = gt.rgb(255, 0, 77)
   col_flag   = gt.rgb(255, 163, 0)
 
-  -- ledges (x, y, width)
-  plx[1] = 28  ply[1] = 100 plw[1] = 24
-  plx[2] = 60  ply[2] = 84  plw[2] = 20
-  plx[3] = 92  ply[3] = 68  plw[3] = 24
-  plx[4] = 40  ply[4] = 56  plw[4] = 18
-  plx[5] = 8   ply[5] = 72  plw[5] = 16
-  plx[6] = 108 ply[6] = 96  plw[6] = 18
+  -- ledges (x, y, width) - screen 1 teaches, 2 and 3 stretch the hops
+  plx[1] = 28   ply[1] = 100 plw[1] = 24
+  plx[2] = 60   ply[2] = 84  plw[2] = 20
+  plx[3] = 92   ply[3] = 68  plw[3] = 24
+  plx[4] = 40   ply[4] = 56  plw[4] = 18
+  plx[5] = 8    ply[5] = 72  plw[5] = 16
+  plx[6] = 108  ply[6] = 96  plw[6] = 18
+  plx[7] = 140  ply[7] = 100 plw[7] = 20
+  plx[8] = 172  ply[8] = 84  plw[8] = 20
+  plx[9] = 204  ply[9] = 96  plw[9] = 18
+  plx[10] = 236 ply[10] = 76 plw[10] = 20
+  plx[11] = 268 ply[11] = 92 plw[11] = 18
+  plx[12] = 296 ply[12] = 72 plw[12] = 20
+  plx[13] = 330 ply[13] = 88 plw[13] = 22
 
   spx[1] = 52
   spx[2] = 74
   spx[3] = 96
+  spx[4] = 160
+  spx[5] = 196
+  spx[6] = 228
+  spx[7] = 262
+  spx[8] = 290
+  spx[9] = 320
+  spx[10] = 352
 end
 
 local GROUND = 116     -- ground surface y
@@ -58,7 +76,7 @@ end
 function land_y(nx, ny)
   -- ground
   if ny + 8 >= GROUND then return GROUND end
-  for i = 1, 6 do
+  for i = 1, 13 do
     if nx + 6 > plx[i] and nx < plx[i] + plw[i] then
       local top = ply[i]
       if ny + 8 >= top and py + 8 <= top + 3 then return top end
@@ -67,7 +85,7 @@ function land_y(nx, ny)
   return -1
 end
 
-function _update60()
+function _update()
   if won > 0 then
     won -= 1
     if won == 0 then respawn() end
@@ -81,7 +99,7 @@ function _update60()
   if (vx < 0) face = -1
   if (vx > 0) face = 1
   px += vx
-  px = mid(0, px, 121)
+  px = mid(0, px, WORLD - 7)
 
   -- jump
   if btnp(4) and on_ground == 1 then
@@ -114,14 +132,14 @@ function _update60()
   if (py > 130) respawn()
 
   -- spikes (on the ground line)
-  for i = 1, 3 do
+  for i = 1, 10 do
     if px + 6 > spx[i] and px < spx[i] + 6 and py + 8 >= GROUND - 1 then
       respawn()
     end
   end
 
-  -- reached the flag (far right)?
-  if px > 116 and py < 104 then
+  -- reached the flag (far right of the world)?
+  if px > WORLD - 18 and py < 104 then
     won = 40
     sfx(1)
   end
@@ -130,27 +148,38 @@ end
 function _draw()
   cls(col_sky)
 
-  -- ground
-  rectfill(0, GROUND, 127, 127, col_ground)
+  -- camera: keep the hero about a third in from the left, clamped to the
+  -- world edges; every draw below is in WORLD coordinates
+  local camx = mid(0, px - 44, WORLD - 128)
+  camera(camx, 0)
 
-  -- ledges
-  for i = 1, 6 do
-    rectfill(plx[i], ply[i], plx[i] + plw[i] - 1, ply[i] + 3, col_plat)
+  -- ground (just the visible strip)
+  rectfill(camx, GROUND, camx + 127, 127, col_ground)
+
+  -- ledges (skip the ones entirely off-screen)
+  for i = 1, 13 do
+    if plx[i] + plw[i] > camx and plx[i] < camx + 128 then
+      rectfill(plx[i], ply[i], plx[i] + plw[i] - 1, ply[i] + 3, col_plat)
+    end
   end
 
   -- spikes (little triangles on the ground)
-  for i = 1, 3 do
+  for i = 1, 10 do
     local x = spx[i]
-    rectfill(x, GROUND - 4, x + 5, GROUND - 1, col_spike)
-    pset(x + 2, GROUND - 5, col_spike)
+    if x + 6 > camx and x < camx + 128 then
+      rectfill(x, GROUND - 4, x + 5, GROUND - 1, col_spike)
+      pset(x + 2, GROUND - 5, col_spike)
+    end
   end
 
-  -- goal flag on the right
-  rectfill(122, 88, 123, 104, 7)
-  rectfill(116, 88, 122, 94, col_flag)
+  -- goal flag at the far right of the world
+  rectfill(WORLD - 6, 88, WORLD - 5, 104, 7)
+  rectfill(WORLD - 12, 88, WORLD - 6, 94, col_flag)
 
   -- player: 8x8 sprite, cell 0 faces right / cell 1 faces left
   if face > 0 then spr(0, px, py) else spr(1, px, py) end
 
+  -- HUD text is screen-space: reset the camera before printing
+  camera()
   if won > 0 then print("nice!", 48, 40, 7) end
 end
