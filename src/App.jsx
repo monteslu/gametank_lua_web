@@ -601,7 +601,7 @@ export function App() {
           </section>
 
           <section className="pane emu-pane">
-            <EmulatorPane rom={rom} onHost={setHost} />
+            <EmulatorPane rom={rom} onHost={setHost} building={building} buildMsg={buildMsg} />
           </section>
 
           <section className="pane output-pane">

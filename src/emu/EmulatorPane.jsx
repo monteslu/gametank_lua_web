@@ -13,7 +13,7 @@ const KEYMAP = {
  * scaling. Reloads whenever `rom` changes (the play loop). rom is a Uint8Array
  * or null.
  */
-export function EmulatorPane({ rom, onHost }) {
+export function EmulatorPane({ rom, onHost, building, buildMsg }) {
   const canvasRef = useRef(null);
   const hostRef = useRef(null);
   const [status, setStatus] = useState("idle");   // idle | loading | running | error
@@ -119,14 +119,23 @@ export function EmulatorPane({ rom, onHost }) {
       >
         {/* canvas is native 128x128; CSS scales it up with pixelated rendering */}
         <canvas ref={canvasRef} className="emu-canvas" width={128} height={128} />
-        {status !== "running" && (
+        {/* building overlay sits on TOP of a still-running previous game, so a
+            slow (10-15s) banked build doesn't look like the old game is stuck. */}
+        {building && (
+          <div className="emu-overlay building">
+            <span className="emu-spinner" aria-hidden="true" />
+            <span>building…</span>
+            {buildMsg && buildMsg !== "building..." && <span className="emu-buildmsg">{buildMsg}</span>}
+          </div>
+        )}
+        {!building && status !== "running" && (
           <div className={"emu-overlay " + status}>
             {status === "idle" && "press Play to build & run"}
             {status === "loading" && "loading core..."}
             {status === "error" && <span className="err">emulator error: {error}</span>}
           </div>
         )}
-        {status === "running" && !focused && (
+        {!building && status === "running" && !focused && (
           <div className="emu-clickhint">click to play</div>
         )}
       </div>
