@@ -34,7 +34,7 @@ end
 function reset_ball(dir)
   bx = 62
   by = 60
-  vx = dir * 2
+  vx = dir
   vy = 1
   if (rnd(2) < 1) vy = -1
   serve = 30
@@ -107,16 +107,16 @@ function _update60()
     vx = -vx
     -- add spin from where it hit the paddle
     local hit = (by + 4) - (p1y + 10)
-    vy = mid(-3, flr(hit / 6) + vy, 3)
-    if (vx < 4) vx += 1
+    vy = mid(-2, flr(hit / 8) + vy, 2)
+    if (vx < 2) vx += 1
     sfx(0)
   end
   -- right paddle (x 118..121)
   if vx > 0 and bx + 8 >= 118 and bx + 8 < 124 and by + 8 > p2y and by < p2y + PH then
     vx = -vx
     local hit = (by + 4) - (p2y + 10)
-    vy = mid(-3, flr(hit / 6) + vy, 3)
-    if (vx > -4) vx -= 1
+    vy = mid(-2, flr(hit / 8) + vy, 2)
+    if (vx > -2) vx -= 1
     sfx(0)
   end
 

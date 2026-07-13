@@ -3,6 +3,8 @@ import { compile } from "gtlua/compiler/index.js";
 // Monaco is heavy (~2.8MB); lazy-load the editor so the app shell + emulator
 // paint immediately and Monaco streams in behind a Suspense fallback.
 const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m.Editor })));
+// cheatsheet pulls in marked; lazy-load it too so it's not in the main bundle
+const Cheatsheet = React.lazy(() => import("./Cheatsheet.jsx").then((m) => ({ default: m.Cheatsheet })));
 import { buildGtr, prewarm } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
@@ -402,6 +404,7 @@ export function App() {
               {music
                 ? <button className={"tab " + (view === "music" ? "sel" : "")} onClick={() => setView("music")}>music</button>
                 : <button className="tab add" onClick={addMusic} title="add a music track (FM tracker)">+ music</button>}
+              <button className={"tab cheat-tab " + (view === "cheat" ? "sel" : "")} onClick={() => setView("cheat")}>📖 cheatsheet</button>
             </div>
             {view === "code" && (
               <Suspense fallback={<div className="editor-loading">loading editor…</div>}>
@@ -418,6 +421,9 @@ export function App() {
                 </div>
                 <MusicEditor song={music} onChange={onMusicChange} />
               </div>
+            )}
+            {view === "cheat" && (
+              <Suspense fallback={<div className="cheat-empty">loading…</div>}><Cheatsheet /></Suspense>
             )}
           </section>
 

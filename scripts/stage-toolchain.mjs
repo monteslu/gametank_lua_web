@@ -140,3 +140,15 @@ for (const ex of EX_LIST) {
 }
 await writeFile(path.join(EX_OUT, "manifest.json"), JSON.stringify({ examples }));
 console.log("staged examples -> public/examples (" + examples.map((e) => e.name).join(", ") + ")");
+
+// ---- stage the gt-lua cheatsheet -> public/docs -----------------------------
+// The IDE shows it in a reference tab next to the code editor. Sourced from the
+// gtlua package so it's always the version that matches the compiler.
+const DOCS_OUT = path.join(HERE, "public", "docs");
+await rm(DOCS_OUT, { recursive: true, force: true });
+await mkdir(DOCS_OUT, { recursive: true });
+const cheat = path.join(GTLUA, "docs", "CHEATSHEET.md");
+if (existsSync(cheat)) {
+  await cp(cheat, path.join(DOCS_OUT, "CHEATSHEET.md"));
+  console.log("staged cheatsheet -> public/docs/CHEATSHEET.md");
+}

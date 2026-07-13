@@ -57,8 +57,8 @@ function _update60()
 
   -- steer, then CLAMP to the road - you don't die at the edges, you just can't
   -- drive off them.
-  if (btn(0)) px -= 2
-  if (btn(1)) px += 2
+  if (btn(0)) px -= 1
+  if (btn(1)) px += 1
   px = mid(ROAD_L, px, ROAD_R - 8)
 
   -- scroll the world (dashes) + accumulate distance

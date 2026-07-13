@@ -103,11 +103,15 @@ function _update60()
     cool = 8
   end
 
-  -- bullets rise
+  -- bullets rise. by[i] is a BYTE (0-255): kill the bullet BEFORE it can go
+  -- below 0, or the subtract underflows and it reappears at the bottom.
   for i = 1, 8 do
     if bon[i] == 1 then
-      by[i] -= 3
-      if (by[i] < 2) bon[i] = 0
+      if by[i] <= 4 then
+        bon[i] = 0
+      else
+        by[i] -= 3
+      end
     end
   end
 

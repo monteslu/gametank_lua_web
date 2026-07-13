@@ -160,6 +160,26 @@ body {
 .pane-tabs .tab:hover { color: var(--fg); }
 .pane-tabs .tab.sel { color: #fff; border-bottom-color: var(--accent); }
 .pane-tabs .tab.add { color: var(--accent-2); font-weight: 700; }
+.pane-tabs .tab.cheat-tab { margin-left: auto; color: var(--sun); }
+
+/* cheatsheet reference (rendered markdown) */
+.cheat-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); font: 12px var(--mono); }
+.cheatsheet { flex: 1; min-height: 0; overflow: auto; padding: 18px 26px; background: #0f1117; color: var(--fg); font: 14px/1.6 system-ui, sans-serif; }
+.markdown { max-width: 820px; }
+.markdown h1 { font-size: 22px; margin: 0 0 12px; color: #fff; }
+.markdown h2 { font-size: 17px; margin: 26px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); color: var(--grape); }
+.markdown h3 { font-size: 14px; margin: 18px 0 6px; color: var(--accent-2); }
+.markdown p, .markdown li { color: #d6dae2; }
+.markdown a { color: var(--accent-2); }
+.markdown code { font: 12px var(--mono); background: #1b1e2b; color: var(--sun); padding: 1px 5px; border-radius: 4px; }
+.markdown pre { background: #12151c; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.markdown pre code { background: none; color: #9fb3c8; padding: 0; }
+.markdown table { border-collapse: collapse; margin: 10px 0; display: block; overflow-x: auto; }
+.markdown th, .markdown td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; font-size: 13px; }
+.markdown th { background: var(--panel-2); color: var(--grape); }
+.markdown hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+.markdown blockquote { border-left: 3px solid var(--grape); margin: 8px 0; padding: 2px 12px; color: var(--dim); }
+.markdown ul, .markdown ol { padding-left: 22px; }
 
 /* sprite editor */
 .sprite-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #0f1117; }

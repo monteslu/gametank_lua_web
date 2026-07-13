@@ -72,10 +72,10 @@ function _update60()
     return
   end
 
-  -- horizontal
+  -- horizontal (btn(0)=LEFT, btn(1)=RIGHT - NOT up/down)
   vx = 0
-  if (btn(2)) vx = -2
-  if (btn(3)) vx = 2
+  if (btn(0)) vx = -2
+  if (btn(1)) vx = 2
   if (vx < 0) face = -1
   if (vx > 0) face = 1
   px += vx
