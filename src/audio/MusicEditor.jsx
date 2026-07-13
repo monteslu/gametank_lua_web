@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { INSTRUMENT_LIST, encodeGtm2, noteNum } from "./gtm2.js";
 import { FmPreview } from "./fm-preview.js";
+import { midiToSong } from "./midi-import.js";
+import { pickFile } from "../util/download.js";
 
 const CHANNELS = 4;
 // note names for the picker, C2..C6 (a comfortable tracker range). Value is
@@ -49,6 +51,22 @@ export function MusicEditor({ song, onChange }) {
     onChange({ ...model, steps, grid });
   };
   const setDelay = (delay) => onChange({ ...model, delay: Math.max(2, Math.min(60, delay | 0)) });
+
+  const [importMsg, setImportMsg] = useState("");
+  const importMidi = useCallback(async () => {
+    const picked = await pickFile(".mid,.midi,audio/midi");
+    if (!picked) return;
+    try {
+      const next = midiToSong(picked.bytes, { instruments: model.instruments });
+      onChange(next);
+      const noteCount = next.grid.flat().filter(Boolean).length;
+      setImportMsg(`imported ${next.steps} steps, ${noteCount} notes`);
+      setTimeout(() => setImportMsg(""), 5000);
+    } catch (e) {
+      setImportMsg("import failed: " + e.message);
+      setTimeout(() => setImportMsg(""), 5000);
+    }
+  }, [model.instruments, onChange]);
 
   // grid -> .gtm2 structured song (an event per NON-EMPTY step; delay = the
   // per-step frame count so timing is even). Empty leading/trailing steps still
@@ -113,6 +131,8 @@ export function MusicEditor({ song, onChange }) {
           <input type="number" min="4" max="64" value={model.steps} onChange={(e) => setSteps(+e.target.value)} />
         </label>
         <span className="tb-sep" />
+        {importMsg && <span className="import-msg">{importMsg}</span>}
+        <button className="tool import" onClick={importMidi} title="import a MIDI file (re-interpreted as 4-channel FM)">import MIDI</button>
         <label className="m-field">note
           <select value={pitch} onChange={(e) => setPitch(+e.target.value)}>
             {NOTE_NAMES.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}

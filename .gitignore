@@ -6,3 +6,4 @@ public/sdk/
 public/core/
 test/*.png
 public/examples/
+.tmp-test.mid
