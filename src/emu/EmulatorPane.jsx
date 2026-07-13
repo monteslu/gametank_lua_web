@@ -13,7 +13,7 @@ const KEYMAP = {
  * scaling. Reloads whenever `rom` changes (the play loop). rom is a Uint8Array
  * or null.
  */
-export function EmulatorPane({ rom }) {
+export function EmulatorPane({ rom, onHost }) {
   const canvasRef = useRef(null);
   const hostRef = useRef(null);
   const [status, setStatus] = useState("idle");   // idle | loading | running | error
@@ -33,6 +33,7 @@ export function EmulatorPane({ rom }) {
       hostRef.current = host;
       host.start(canvasRef.current);
       setStatus("running");
+      onHost?.(host);
     }).catch((e) => {
       if (cancelled) return;
       setError(String(e?.message ?? e));
@@ -42,6 +43,7 @@ export function EmulatorPane({ rom }) {
     return () => {
       cancelled = true;
       if (hostRef.current) { hostRef.current.dispose(); hostRef.current = null; }
+      onHost?.(null);
     };
   }, [rom]);
 

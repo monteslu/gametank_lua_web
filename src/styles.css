@@ -243,6 +243,27 @@ body {
 .ff-row input { width: 70px; background: #12151c; color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; font: 12px var(--mono); }
 .ff-center { margin-top: 6px; font: 11px system-ui, sans-serif; color: var(--fg); background: #262b36; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
 
+/* debugger: RAM viewer */
+.pane-tabs.bottom { border-top: 0; }
+.ram-empty { padding: 16px 12px; color: var(--dim); font: 12px var(--mono); }
+.ram { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 6px 8px; }
+.ram-nav { display: flex; align-items: center; gap: 8px; padding: 4px 4px 8px; }
+.ram-nav button { width: 24px; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.ram-nav button:disabled { opacity: 0.4; cursor: default; }
+.ram-addr { font: 700 12px var(--mono); color: var(--accent-2); }
+.ram-size { margin-left: auto; font: 11px var(--mono); color: var(--dim); }
+.ram-grid { font: 11px/1.5 var(--mono); }
+.ram-row { display: flex; gap: 10px; white-space: nowrap; }
+.ram-rowaddr { color: var(--grape); }
+.ram-hex { color: var(--fg); }
+.ram-byte { display: inline-block; width: 18px; text-align: center; cursor: pointer; border-radius: 3px; }
+.ram-byte:hover { background: rgba(180,140,255,0.2); }
+.ram-byte.zero { color: #4b4368; }
+.ram-byte.dim { color: #33304a; cursor: default; }
+.ram-edit { width: 18px; padding: 0; text-align: center; background: var(--accent); color: #1a1726; border: 0; border-radius: 3px; font: 700 11px var(--mono); }
+.ram-ascii { color: var(--dim); }
+.ram-ascii .dim { color: #33304a; }
+
 /* music tracker */
 .music-pane-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f1117; }
 .music-usebar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }

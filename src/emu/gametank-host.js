@@ -151,6 +151,34 @@ export class GameTankHost {
   /** Hardware reset (re-runs the cart from the reset vector). */
   reset() { if (this.mod) this.mod._retro_reset(); }
 
+  // --- memory access (the debugger's RAM view) ----------------------------
+  // RETRO_MEMORY_SYSTEM_RAM = 2. The core exposes the 65C02 system RAM via
+  // retro_get_memory_data/size; we read/write it live through the WASM heap.
+  _ramView() {
+    const mod = this.mod;
+    if (!mod) return null;
+    const ptr = mod._retro_get_memory_data(2);
+    const size = mod._retro_get_memory_size(2);
+    if (!ptr || !size) return null;
+    return new Uint8Array(mod.HEAPU8.buffer, ptr, size);
+  }
+  /** System RAM size in bytes (0 if unavailable). */
+  ramSize() { const v = this._ramView(); return v ? v.length : 0; }
+  /** Read `len` bytes of system RAM starting at `addr` (a copy). */
+  readRam(addr = 0, len) {
+    const v = this._ramView();
+    if (!v) return new Uint8Array(0);
+    const end = len === undefined ? v.length : Math.min(v.length, addr + len);
+    return v.slice(addr, end);
+  }
+  /** Write one byte of system RAM. Returns true if it stuck. */
+  writeRam(addr, byte) {
+    const v = this._ramView();
+    if (!v || addr < 0 || addr >= v.length) return false;
+    v[addr] = byte & 0xff;
+    return true;
+  }
+
   /** Set a gt-lua button (0-7, see GT_BTN) down/up. */
   setButton(gtIndex, down) {
     const id = GT_BTN[gtIndex];

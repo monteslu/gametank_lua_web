@@ -5,6 +5,7 @@ import { compile } from "gtlua/compiler/index.js";
 const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m.Editor })));
 import { buildGtr } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
+import { RamViewer } from "./emu/RamViewer.jsx";
 import { Sidebar } from "./projects/Sidebar.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
 import { loadExampleFiles } from "./projects/examples.js";
@@ -49,6 +50,8 @@ export function App() {
   const [view, setView] = useState("code");      // "code" | "sprite" | "frames" | "music"
 
   const [rom, setRom] = useState(null);
+  const [host, setHost] = useState(null);          // running GameTankHost (for the debugger)
+  const [bottomTab, setBottomTab] = useState("problems");   // "problems" | "ram"
   const [building, setBuilding] = useState(false);
   const [buildMsg, setBuildMsg] = useState("");
   const [buildErr, setBuildErr] = useState("");
@@ -379,19 +382,27 @@ export function App() {
 
           <section className="pane emu-pane">
             <div className="pane-title">emulator</div>
-            <EmulatorPane rom={rom} />
+            <EmulatorPane rom={rom} onHost={setHost} />
           </section>
 
           <section className="pane output-pane">
-            <div className="pane-title">problems</div>
-            <ul className="problems">
-              {result.diagnostics.length === 0 && <li className="ok">no problems - compiles clean</li>}
-              {result.diagnostics.map((d, i) => (
-                <li key={i} className={d.severity}>
-                  <span className="loc">{d.line}:{d.col}</span> {d.message}
-                </li>
-              ))}
-            </ul>
+            <div className="pane-tabs bottom">
+              <button className={"tab " + (bottomTab === "problems" ? "sel" : "")} onClick={() => setBottomTab("problems")}>
+                problems{errors.length ? ` (${errors.length})` : ""}
+              </button>
+              <button className={"tab " + (bottomTab === "ram" ? "sel" : "")} onClick={() => setBottomTab("ram")}>RAM</button>
+            </div>
+            {bottomTab === "problems" && (
+              <ul className="problems">
+                {result.diagnostics.length === 0 && <li className="ok">no problems - compiles clean</li>}
+                {result.diagnostics.map((d, i) => (
+                  <li key={i} className={d.severity}>
+                    <span className="loc">{d.line}:{d.col}</span> {d.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {bottomTab === "ram" && <RamViewer host={host} />}
           </section>
         </main>
       </div>
