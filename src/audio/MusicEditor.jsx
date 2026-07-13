@@ -287,7 +287,7 @@ export function MusicEditor({ song, onChange }) {
       {/* the step grid */}
       <div className="music-grid">
         {model.grid.slice(0, model.steps).map((row, s) => (
-          <div key={s} className={"mg-row " + (s === playRow ? "play" : "") + (s % 4 === 0 ? " beat" : "")}>
+          <div key={s} className={"mg-row " + (s === playRow ? "playhead" : "") + (s % 4 === 0 ? " beat" : "")}>
             <div className="mg-step">{s}</div>
             {row.map((cell, ch) => {
               const note = noteOf(cell);
