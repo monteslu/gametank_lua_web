@@ -223,10 +223,22 @@ export class GameTankHost {
     this.ctx.putImageData(this.imageData, 0, 0);
   }
 
+  // Create/resume the AudioContext from a USER GESTURE (a click on the emulator).
+  // Browsers start a context suspended until a gesture, so audio created purely
+  // from the frame loop stays silent forever - call this on click to unmute.
+  unlockAudio() {
+    if (!this._audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this._audioCtx = new AC({ sampleRate: this.sampleRate });
+      this._nextAudioTime = this._audioCtx.currentTime;
+    }
+    if (this._audioCtx.state === "suspended") this._audioCtx.resume();
+  }
+
   _flushAudio() {
     if (!this._audioQueue || !this._audioQueue.length) return;
-    // Lazily create the AudioContext on first audio (a user gesture already
-    // started playback, so resume() is allowed).
+    // Lazily create the AudioContext on first audio (may be suspended until the
+    // user clicks the screen - unlockAudio() resumes it).
     if (!this._audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       this._audioCtx = new AC({ sampleRate: this.sampleRate });

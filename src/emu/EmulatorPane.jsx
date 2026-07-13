@@ -76,8 +76,9 @@ export function EmulatorPane({ rom, onHost }) {
   const goFullscreen = () => {
     const el = screenRef.current;
     if (!el) return;
-    // fullscreen also SELECTS the emulator (grabs input) if it wasn't already
+    // fullscreen also SELECTS the emulator (grabs input) + unmutes audio
     el.focus();
+    hostRef.current?.unlockAudio();
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
     if (document.fullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); }
     else if (req) req.call(el);
@@ -95,7 +96,7 @@ export function EmulatorPane({ rom, onHost }) {
         tabIndex={0}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        onMouseDown={() => screenRef.current?.focus()}
+        onMouseDown={() => { screenRef.current?.focus(); hostRef.current?.unlockAudio(); }}
       >
         {/* canvas is native 128x128; CSS scales it up with pixelated rendering */}
         <canvas ref={canvasRef} className="emu-canvas" width={128} height={128} />
