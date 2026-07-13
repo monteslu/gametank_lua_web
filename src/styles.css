@@ -204,7 +204,7 @@ body {
 .sprite-toolbar .tool.icon.sel { background: linear-gradient(180deg, #ffa3d6, var(--accent)); color: #2a0b1e; border-color: var(--accent); }
 .sprite-toolbar .import-msg, .music-toolbar .import-msg, .frame-toolbar .import-msg { font: 11px var(--mono); color: var(--ok); }
 .sprite-toolbar .tb-gap { width: 6px; }
-.sprite-toolbar .tb-sep { flex: 1; }
+.sprite-toolbar .tb-sep, .music-usebar .tb-sep, .music-toolbar .tb-sep, .frame-toolbar .tb-sep { flex: 1; }
 .sprite-toolbar .zoom { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--dim); }
 .sprite-body { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
 /* the canvas region scrolls on its own (both axes) when zoomed past the pane;

@@ -6,11 +6,14 @@
 // 2-op FM voice (carrier + modulator) with a preset ratio/index/envelope.
 import { noteNum } from "./gtm2.js";
 
-// 1-based MIDI note -> Hz. note 0 = rest. The player uses note-1 (0-based MIDI),
-// so freq = 440 * 2^((note-1 - 69)/12).
+// .gtm2 note byte -> Hz. note 0 = rest. The byte is the console's pitch-table
+// index (the official format's raw value), tuned so index 57 = A4 = 440 Hz
+// (i.e. MIDI - 12) - verified against the emulator core by spectral capture
+// (441 Hz, +4 cents). Keeping this in lockstep with the console player is what
+// makes the editor preview sound like the built game.
 export function noteToFreq(note) {
   if (!note) return 0;
-  return 440 * Math.pow(2, ((note - 1) - 69) / 12);
+  return 440 * Math.pow(2, (note - 57) / 12);
 }
 
 // per-instrument 2-op FM presets: modulator ratio, modulation index, and an

@@ -121,6 +121,16 @@ async function buildCart(source, opts = {}) {
     hasSheet = true;
   }
   if (opts.framesBytes) vfs.set("/work/gfx.gsi", new Uint8Array(opts.framesBytes));
+  // project songs: mount each .gtm2 blob; build() injects them into the game C
+  // and registers a song bank so music(n) plays project song n.
+  const songsPaths = [];
+  if (opts.songs) {
+    opts.songs.forEach((bytes, i) => {
+      const p = `/work/song${i}.gtm2`;
+      vfs.set(p, bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+      songsPaths.push(p);
+    });
+  }
 
   // SYNCHRONOUS tool runner with a CROSS-BUILD compile cache.
   //
@@ -189,7 +199,7 @@ async function buildCart(source, opts = {}) {
   const sheetPath = hasSheet ? "/work/gfx.gtg" : undefined;
   const framesPath = opts.framesBytes ? "/work/gfx.gsi" : undefined;
   const gtrPath = "/work/game.gtr";
-  await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath }, env);
+  await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath, songsPaths }, env);
 
   const gtr = vfs.get(gtrPath);
   return { ok: true, gtr, ms: Math.round(performance.now() - t0) };

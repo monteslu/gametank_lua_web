@@ -369,12 +369,17 @@ export function App() {
       // sprite sheet -> the up-to-four 128x128 quadrant files the compiler
       // stitches (gfx.gtg + gfx_1/2/3.gtg). splitSheet omits empty quadrants.
       const quadrantBytes = sheet ? splitSheet(sheet) : undefined;
+      // tracker songs -> .gtm2 blobs, in songbook order; the build registers
+      // them so music(0) plays THE PROJECT'S song 0 (the tune in the editor),
+      // music(1) song 1, and so on.
+      const songBytes = songs && songs.length ? songs.map((s) => songToBytes(s.model)) : undefined;
       const { gtr, ms } = await buildGtr(source, {
         // num8 (8.8 fixed) is a per-project numeric mode; default off to match
         // the CLI. A project toggle can set it later; forcing it on would change
         // fixed-point semantics for games that don't expect it.
         quadrantBytes,
         framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
+        songs: songBytes,
         onProgress: (m) => { if (seq === buildSeq.current) setBuildMsg(m); },
       });
       if (seq !== buildSeq.current) return;
@@ -387,7 +392,7 @@ export function App() {
     } finally {
       if (seq === buildSeq.current) setBuilding(false);
     }
-  }, [source, errors.length, sheet, frames]);
+  }, [source, errors.length, sheet, frames, songs]);
 
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
@@ -532,12 +537,13 @@ export function App() {
                   )}
                 </div>
                 <div className="music-usebar">
-                  <button className="tb-btn" onClick={copySongLine} title="copy this song as a hexdata(...) line to paste into your code">
-                    {copiedSong ? "✓ copied" : "⧉ copy hexdata line"}
-                  </button>
                   <span className="music-usehint">
-                    copies <code>local {songVarName(songs?.[songIdx]?.name, songIdx)} = hexdata(...)</code> · play it with <code>song({songVarName(songs?.[songIdx]?.name, songIdx)})</code>
+                    <b>play in game:</b> <code>music({songIdx})</code> plays this song ({songs?.[songIdx]?.name ?? "song"}) · songs are built into the cart by position
                   </span>
+                  <span className="tb-sep" />
+                  <button className="tb-btn" onClick={copySongLine} title="advanced: copy this song as a raw hexdata(...) line, for playing via song() from your own data">
+                    {copiedSong ? "✓ copied" : "⧉ copy hexdata"}
+                  </button>
                 </div>
                 <MusicEditor song={music} onChange={onMusicChange} />
               </div>

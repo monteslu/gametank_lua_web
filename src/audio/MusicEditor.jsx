@@ -146,7 +146,7 @@ export function MusicEditor({ song, onChange }) {
       if (heldKeys.current.has(e.code)) { e.preventDefault(); return; }   // ignore auto-repeat
       heldKeys.current.add(e.code);
       const midi = noteNum("c" + baseOctave) + semi;
-      if (midi >= 1 && midi <= 128) {
+      if (midi >= 1 && midi <= 107) {   // valid pitch-table indices
         setPitch(midi);
         setGrid(cursor.step, cursor.ch, midi);
         previewNote(midi);

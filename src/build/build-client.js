@@ -10,6 +10,8 @@
  * @property {Record<string, Uint8Array>} [quadrantBytes] up to 4 sprite-sheet
  *   quadrant files, keyed by filename (gfx.gtg + gfx_1/2/3.gtg)
  * @property {ArrayBuffer} [framesBytes] encoded .gsi frame table
+ * @property {Uint8Array[]} [songs] the project's .gtm2 songs, in order - the
+ *   build registers them so music(n) plays project song n
  * @property {(msg:string)=>void} [onProgress]
  */
 

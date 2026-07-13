@@ -78,7 +78,9 @@ export function midiToSong(buf, { stepsPerBeat = 4, maxSteps = MAX_STEPS, instru
   const ticksPerStep = Math.max(1, Math.round(division / stepsPerBeat));
 
   // quantize each note to a step; find the song length in steps
-  const placed = notes.map((n) => ({ step: Math.round(n.tick / ticksPerStep), note: n.note + 1, srcCh: n.ch, vel: n.vel }));
+  // MIDI note -> .gtm2 byte: the console pitch-table index = MIDI - 12 (A4=57),
+  // clamped to the table's 1..107 (0 is key-off).
+  const placed = notes.map((n) => ({ step: Math.round(n.tick / ticksPerStep), note: Math.max(1, Math.min(107, n.note - 12)), srcCh: n.ch, vel: n.vel }));
   let steps = Math.min(maxSteps, Math.max(...placed.map((p) => p.step)) + 1);
   steps = Math.max(4, steps);
 

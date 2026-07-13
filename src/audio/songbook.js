@@ -24,10 +24,24 @@ function isBareModel(o) {
   return o && typeof o === "object" && Array.isArray(o.grid) && !Array.isArray(o.songs);
 }
 
+// Note-convention migration. Grids saved before v3 used the OLD note bytes
+// (1-based-MIDI: A4 = 70); v3 grids store the console's official pitch-table
+// index (A4 = 57 = MIDI - 12, the byte Clyde's tools read/write and the SDK
+// keys unshifted). Shift old cells -13 so a song previews AND plays at the
+// pitch its author composed. 0 stays 0 (rest); results clamp to 1..107.
+function migrateModelNotes(model) {
+  const mig = (n) => (n ? Math.max(1, Math.min(107, n - 13)) : 0);
+  const grid = (model.grid || []).map((row) => (row || []).map((cell) => {
+    if (cell && typeof cell === "object") return { ...cell, note: mig(cell.note | 0) };
+    return mig(cell | 0);
+  }));
+  return { ...model, grid };
+}
+
 /**
  * Parse a stored music.json (string or object) into a songbook. Accepts:
- *  - a v2 songbook envelope (returned as-is, normalized)
- *  - a bare single model (wrapped as a one-song book)
+ *  - a v3 songbook envelope (current: new note bytes, returned as-is)
+ *  - a v2 envelope or bare single model (old note bytes: migrated -13)
  *  - null/undefined/"" (returns null - no music)
  * @returns {{ songs: {name:string, model:object}[], current:number } | null}
  */
@@ -36,20 +50,21 @@ export function parseSongbook(raw) {
   const o = typeof raw === "string" ? JSON.parse(raw) : raw;
   if (!o) return null;
   if (Array.isArray(o.songs)) {
+    const old = (o.v | 0) < 3;
     const songs = o.songs
       .filter((s) => s && s.model)
-      .map((s, i) => ({ name: String(s.name ?? `song ${i}`), model: s.model }));
+      .map((s, i) => ({ name: String(s.name ?? `song ${i}`), model: old ? migrateModelNotes(s.model) : s.model }));
     if (!songs.length) return null;
     const current = Math.min(Math.max(0, o.current | 0), songs.length - 1);
     return { songs, current };
   }
-  if (isBareModel(o)) return { songs: [{ name: "song 0", model: o }], current: 0 };
+  if (isBareModel(o)) return { songs: [{ name: "song 0", model: migrateModelNotes(o) }], current: 0 };
   return null;
 }
 
-/** Serialize a songbook to the stored envelope string. */
+/** Serialize a songbook to the stored envelope string (v3 = official note bytes). */
 export function serializeSongbook(book) {
-  return JSON.stringify({ v: 2, songs: book.songs, current: book.current });
+  return JSON.stringify({ v: 3, songs: book.songs, current: book.current });
 }
 
 /** A lua-identifier-safe variable name derived from a song's name. */
