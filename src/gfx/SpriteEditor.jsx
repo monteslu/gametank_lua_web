@@ -191,7 +191,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
         <button className="tool" onClick={importGtg} title="import a raw .gtg sheet (e.g. from a C project)">.gtg ▾</button>
         <button className="tool" onClick={exportGtg} title="export the sheet as a raw .gtg (for a C project)">.gtg ▴</button>
         <label className="zoom">zoom
-          <input type="range" min="2" max="10" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
+          <input type="range" min="2" max="20" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
           {zoom}x
         </label>
       </div>
