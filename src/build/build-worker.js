@@ -26,6 +26,7 @@ const dec = new TextDecoder();
 // ---- warm caches (loaded/compiled once, reused for the worker's life) -------
 const moduleCache = new Map();     // tool -> WebAssembly.Module (compiled)
 const shareCache = new Map();      // subdir -> Map<vfsPath, Uint8Array>
+const compileCache = new Map();    // cc65/ca65 result cache, PERSISTS across builds (see runTool)
 let sdkFiles = null;               // Map<path, Uint8Array>
 let shareManifest = null;
 
@@ -108,9 +109,32 @@ async function buildCart(source, opts = {}) {
   if (opts.sheetBytes) vfs.set("/work/gfx.gtg", new Uint8Array(opts.sheetBytes));
   if (opts.framesBytes) vfs.set("/work/gfx.gsi", new Uint8Array(opts.framesBytes));
 
-  // SYNCHRONOUS tool runner: instantiate the pre-compiled module, run, collect
-  // declared outputs. (Share tree already mounted above.)
+  // SYNCHRONOUS tool runner with a CROSS-BUILD compile cache.
+  //
+  // cc65/ca65 are deterministic (reproducible objects), and each call is
+  // `[...flags, -o <dst>, <src>]` with ONE primary input. The SDK runtime units
+  // (gt_api/gt_fixed/gt_math/crt0/...) are invariant - the editor can't change
+  // them - yet build() recompiles them every time (its objMemo resets per call).
+  // So cache the tool's output keyed on (flags + src PATH + hash of the src
+  // BYTES): on a hit we write the remembered output and skip the WASM tool. The
+  // byte-hash means a changed source -> new key -> recompiles once ("always the
+  // latest"). ld65 is NOT cached (many varying .o inputs; already fast).
   const runTool = (tool, args) => {
+    const cacheable = (tool === "cc65" || tool === "ca65");
+    let cacheKey = null;
+    if (cacheable) {
+      const oi = args.indexOf("-o");
+      const dst = oi >= 0 ? args[oi + 1] : null;
+      const src = args[args.length - 1];
+      const srcBytes = vfs.get(src);
+      if (dst && srcBytes) {
+        // key on the flags (with the src path, but NOT the abs -o path) + src hash
+        const flagArgs = args.filter((_, i) => i !== oi && i !== oi + 1);
+        cacheKey = tool + "\x1f" + flagArgs.join("\x1f") + "\x1f" + fnv1aHex(srcBytes);
+        const hit = compileCache.get(cacheKey);
+        if (hit) { vfs.set(dst, hit.out); return { status: hit.status, stdout: "", stderr: hit.stderr }; }
+      }
+    }
     let stderr = "";
     const status = runWasmTool(moduleCache.get(tool), {
       fs: vfs, argv: [tool, ...args], print: () => {}, printErr: (s) => { stderr += s + "\n"; },
@@ -119,7 +143,13 @@ async function buildCart(source, opts = {}) {
     // (ld65 colorizes "Segment X overflows ... by N bytes"; the escape between
     // the quote and the segment name would hide it and hard-fail the FLASH2M
     // re-target). Same fix the CLI's wasm_worker applies.
-    return { status, stdout: "", stderr: stderr.replace(/\x1b\[[0-9;]*m/g, "") };
+    const cleanErr = stderr.replace(/\x1b\[[0-9;]*m/g, "");
+    if (cacheKey && status === 0) {
+      const oi = args.indexOf("-o");
+      const out = vfs.get(args[oi + 1]);
+      if (out) compileCache.set(cacheKey, { out, status, stderr: cleanErr });
+    }
+    return { status, stdout: "", stderr: cleanErr };
   };
 
   const env = {
