@@ -5,6 +5,7 @@ import { compile } from "gtlua/compiler/index.js";
 const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m.Editor })));
 // cheatsheet pulls in marked; lazy-load it too so it's not in the main bundle
 const Cheatsheet = React.lazy(() => import("./Cheatsheet.jsx").then((m) => ({ default: m.Cheatsheet })));
+const ProjectSettings = React.lazy(() => import("./ProjectSettings.jsx").then((m) => ({ default: m.ProjectSettings })));
 import { buildGtr, prewarm } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
@@ -13,6 +14,7 @@ import { Sidebar } from "./projects/Sidebar.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
 import { loadExampleFiles } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
+import { readManifest, writeManifest, ensureManifest, defaultManifest } from "./projects/manifest.js";
 import { downloadBytes, pickFile } from "./util/download.js";
 import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
 import { newSheet, splitSheet, joinSheet, QUAD_FILES } from "./gfx/gtg.js";
@@ -56,6 +58,8 @@ export function App() {
   const [songs, setSongs] = useState(null);      // [{name, model}] or null (no music)
   const [songIdx, setSongIdx] = useState(0);
   const [music, setMusic] = useState(null);      // active song model (songs[songIdx].model)
+  const [num8, setNum8] = useState(false);       // 8.8 fixed-point build mode (mirrors project.num8)
+  const [project, setProject] = useState({});    // project.json manifest (title/romname/num8, GameTank SDK shape)
   const [view, setView] = useState("code");      // "code" | "sprite" | "frames" | "music"
 
   const [rom, setRom] = useState(null);
@@ -110,6 +114,13 @@ export function App() {
     setSongs(book ? book.songs : null);
     setSongIdx(book ? book.current : 0);
     setMusic(book ? book.songs[book.current].model : null);
+    // project.json - the GameTank project manifest (official C SDK shape:
+    // title/romname, plus gtlua build knobs like num8). readManifest always
+    // returns a complete manifest, defaulting anything missing - so even a
+    // legacy project opened here behaves as if it always had one.
+    const proj = readManifest(rec.files["project.json"] ? asText(rec.files["project.json"]) : null, rec.name);
+    setProject(proj);
+    setNum8(!!proj.num8);
     setView("code");
     setRom(null); setBuildMsg(""); setBuildErr("");
   }, []);
@@ -223,6 +234,21 @@ export function App() {
     refreshProjects();
   }, [currentId, refreshProjects]);
 
+  // project.json (Settings tab): persist the manifest + mirror num8 into the
+  // build. Title/romname are metadata; num8 changes what the next build does.
+  const onProjectChange = useCallback(async (next) => {
+    setProject(next);
+    setNum8(!!next.num8);
+    if (!currentId) return;
+    const rec = await getProject(currentId);
+    if (!rec) return;
+    rec.files["project.json"] = writeManifest(next);
+    // keep the project's display name in sync with its title
+    if (next.title && next.title !== rec.name) rec.name = next.title;
+    await saveProject(rec, Date.now());
+    refreshProjects();
+  }, [currentId, refreshProjects]);
+
   // music: a songbook [{name, model}] persisted as music.json (v2 envelope).
   // Persist the whole book immediately (add/rename/delete are structural), or
   // debounced for note edits.
@@ -329,13 +355,24 @@ export function App() {
 
   // --- project ops ---------------------------------------------------------
   const newProject = useCallback(async () => {
-    const rec = await createProject("untitled", { "main.lua": "function _draw()\n  cls(0)\nend\n" }, Date.now());
+    const files = { "main.lua": "function _draw()\n  cls(0)\nend\n" };
+    files["project.json"] = writeManifest(defaultManifest("untitled"));
+    const rec = await createProject("untitled", files, Date.now());
     await refreshProjects();
     await openProject(rec.id);
   }, [refreshProjects, openProject]);
 
   const forkExample = useCallback(async (ex) => {
     const files = await loadExampleFiles(ex);
+    // seed a project.json manifest (GameTank SDK shape) so build knobs like
+    // num8 survive fork/reload/export and the Settings tab can edit them. If the
+    // example shipped its own project.json, keep it; else default from its name.
+    ensureManifest(files, ex.name);
+    if (ex.num8 && !JSON.parse(files["project.json"]).num8) {
+      const m = readManifest(files["project.json"], ex.name);
+      m.num8 = true;
+      files["project.json"] = writeManifest(m);
+    }
     const rec = await createProject(ex.name, files, Date.now());
     await refreshProjects();
     await openProject(rec.id);
@@ -374,9 +411,8 @@ export function App() {
       // music(1) song 1, and so on.
       const songBytes = songs && songs.length ? songs.map((s) => songToBytes(s.model)) : undefined;
       const { gtr, ms } = await buildGtr(source, {
-        // num8 (8.8 fixed) is a per-project numeric mode; default off to match
-        // the CLI. A project toggle can set it later; forcing it on would change
-        // fixed-point semantics for games that don't expect it.
+        // num8 (8.8 fixed) is a per-project setting; some ports require it.
+        num8,
         quadrantBytes,
         framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
         songs: songBytes,
@@ -392,7 +428,7 @@ export function App() {
     } finally {
       if (seq === buildSeq.current) setBuilding(false);
     }
-  }, [source, errors.length, sheet, frames, songs]);
+  }, [source, errors.length, sheet, frames, songs, num8]);
 
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
@@ -436,9 +472,12 @@ export function App() {
   const exportBundle = useCallback(async () => {
     const rec = currentId ? await getProject(currentId) : { files: { "main.lua": source } };
     const files = { ...rec.files };
-    files["project.json"] = JSON.stringify({ name: projectName, entry: "main.lua" }, null, 2);
+    // ship a complete, normalized project.json (title/entry/romname/num8) so the
+    // bundle re-imports cleanly here AND is a valid GameTank-shaped project file.
+    const m = readManifest(files["project.json"], projectName);
+    files["project.json"] = writeManifest(m);
     const zip = zipStore(files);
-    downloadBytes(`${projectName || "project"}.gtlua`, zip, "application/zip");
+    downloadBytes(`${m.romname ? m.romname.replace(/\.gtr$/i, "") : projectName || "project"}.gtlua`, zip, "application/zip");
   }, [currentId, source, projectName]);
 
   const importBundle = useCallback(async () => {
@@ -446,15 +485,17 @@ export function App() {
     if (!picked) return;
     let files;
     try { files = unzip(picked.bytes); } catch (e) { setBuildErr(`import failed: ${e.message}`); return; }
-    let name = picked.name.replace(/\.(gtlua|zip)$/i, "");
-    if (files["project.json"]) {
-      try { name = JSON.parse(dec.decode(files["project.json"])).name || name; } catch { /* keep filename */ }
-      delete files["project.json"];
-    }
-    // text-decode main.lua (stored as bytes in the zip)
+    // text-decode the text files (project.json + *.lua stored as bytes in the zip)
     const norm = {};
-    for (const [p, bytes] of Object.entries(files)) norm[p] = p.endsWith(".lua") ? dec.decode(bytes) : bytes;
-    const rec = await createProject(name, norm, Date.now());
+    for (const [p, bytes] of Object.entries(files)) {
+      norm[p] = (p.endsWith(".lua") || p.endsWith(".json")) ? dec.decode(bytes) : bytes;
+    }
+    const fileName = picked.name.replace(/\.(gtlua|zip)$/i, "");
+    // read (or default) the manifest, then KEEP it - the project name comes from
+    // its title, and its build settings (num8) survive the round-trip. A bundle
+    // with no manifest (or a legacy {name,entry} one) gets a fresh valid one.
+    const manifest = ensureManifest(norm, fileName);
+    const rec = await createProject(manifest.title || fileName, norm, Date.now());
     await refreshProjects();
     await openProject(rec.id);
   }, [refreshProjects, openProject]);
@@ -503,6 +544,7 @@ export function App() {
               {music
                 ? <button className={"tab " + (view === "music" ? "sel" : "")} onClick={() => setView("music")}>music</button>
                 : <button className="tab add" onClick={addMusic} title="add a music track (FM tracker)">+ music</button>}
+              <button className={"tab " + (view === "settings" ? "sel" : "")} onClick={() => setView("settings")} title="project settings (project.json)">⚙ settings</button>
               <button className={"tab cheat-tab " + (view === "cheat" ? "sel" : "")} onClick={() => setView("cheat")}>📖 cheatsheet</button>
             </div>
             {view === "code" && (
@@ -547,6 +589,11 @@ export function App() {
                 </div>
                 <MusicEditor song={music} onChange={onMusicChange} />
               </div>
+            )}
+            {view === "settings" && (
+              <Suspense fallback={<div className="cheat-empty">loading…</div>}>
+                <ProjectSettings project={project} onChange={onProjectChange} projectName={projectName} />
+              </Suspense>
             )}
             {view === "cheat" && (
               <Suspense fallback={<div className="cheat-empty">loading…</div>}><Cheatsheet /></Suspense>

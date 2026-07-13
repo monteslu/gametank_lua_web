@@ -106,7 +106,11 @@ console.log("staged GameTank core -> public/core (gametank_libretro.js + .wasm)"
 const EX_OUT = path.join(HERE, "public", "examples");
 const SDK_EX = path.join(GTLUA, "examples");
 const LOCAL_EX = path.join(HERE, "examples");
-// order = gallery order. `from` picks the source tree.
+// The three real PICO-8 ports live in a sibling repo. They're full games (big
+// banked carts, licensed), staged with their LICENSE so the attribution ships.
+const PORTS = path.join(path.dirname(HERE), "gtlua-ports");
+// order = gallery order. `from` picks the source tree. `num8` marks a project
+// that must build in the 8.8 number model; `license` carries a credit line.
 const EX_LIST = [
   { name: "hello", from: SDK_EX, blurb: "A smiley + text. The zero-asset starting point." },
   { name: "shmup", from: LOCAL_EX, blurb: "STARFALL: a space shooter. Move + fire, music + SFX." },
@@ -114,6 +118,10 @@ const EX_LIST = [
   { name: "puzzle", from: LOCAL_EX, blurb: "Falling-block stacker. Rotate, drop, clear lines." },
   { name: "racing", from: LOCAL_EX, blurb: "Top-down racer. Dodge traffic, keep on the road." },
   { name: "sports", from: LOCAL_EX, blurb: "2-player paddle-ball. First to the corner wins." },
+  // real ported games (heavier - first build takes ~10-15s, banked 2 MB carts)
+  { name: "cherry-bomb", from: PORTS, blurb: "Cherry Bomb by Krystman / Lazy Devs (PICO-8 port). CC-BY-NC-SA.", license: "Cherry Bomb (c) Krystman / Lazy Devs Academy - CC-BY-NC-SA 4.0" },
+  { name: "combo-pool", from: PORTS, num8: true, blurb: "Combo Pool by NuSan (PICO-8 port). Merge balls, chain combos. CC-BY-NC-SA.", license: "Combo Pool (c) NuSan - CC-BY-NC-SA 4.0" },
+  { name: "newleste", from: PORTS, blurb: "Celeste Classic (newleste.p8 port). Climb, jump, dash. GPL-3.0.", license: "Celeste Classic / newleste.p8 - Maddy Thorson, Noel Berry + CelesteClassic community - GPL-3.0" },
   { name: "orbit", from: SDK_EX, blurb: "Bouncing bodies with fixed-point math." },
   { name: "pad-square", from: SDK_EX, blurb: "Move a square with the d-pad. Input demo." },
   { name: "audio", from: SDK_EX, blurb: "Built-in SFX and music." },
@@ -129,15 +137,18 @@ for (const ex of EX_LIST) {
   await mkdir(path.join(EX_OUT, ex.name), { recursive: true });
   await cp(src, path.join(EX_OUT, ex.name, "main.lua"));
   const files = ["main.lua"];
-  // an example may ship a sprite sheet, frame table, and/or tracker song so those
-  // editors open populated; carry them along.
-  for (const asset of ["gfx.gtg", "gfx.gsi", "music.json"]) {
+  // an example may ship a sprite sheet, frame table, tracker song, and/or a
+  // LICENSE (ports) so those editors open populated + attribution ships.
+  for (const asset of ["gfx.gtg", "gfx.gsi", "music.json", "LICENSE"]) {
     if (existsSync(path.join(dir, asset))) {
       await cp(path.join(dir, asset), path.join(EX_OUT, ex.name, asset));
       files.push(asset);
     }
   }
-  examples.push({ name: ex.name, blurb: ex.blurb, files });
+  const entry = { name: ex.name, blurb: ex.blurb, files };
+  if (ex.num8) entry.num8 = true;
+  if (ex.license) entry.license = ex.license;
+  examples.push(entry);
 }
 await writeFile(path.join(EX_OUT, "manifest.json"), JSON.stringify({ examples }));
 console.log("staged examples -> public/examples (" + examples.map((e) => e.name).join(", ") + ")");
