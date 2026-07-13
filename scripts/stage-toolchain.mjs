@@ -123,11 +123,20 @@ await rm(EX_OUT, { recursive: true, force: true });
 await mkdir(EX_OUT, { recursive: true });
 const examples = [];
 for (const ex of EX_LIST) {
-  const src = path.join(ex.from, ex.name, "main.lua");
+  const dir = path.join(ex.from, ex.name);
+  const src = path.join(dir, "main.lua");
   if (!existsSync(src)) continue;
   await mkdir(path.join(EX_OUT, ex.name), { recursive: true });
   await cp(src, path.join(EX_OUT, ex.name, "main.lua"));
-  examples.push({ name: ex.name, blurb: ex.blurb, files: ["main.lua"] });
+  const files = ["main.lua"];
+  // an example may ship a sprite sheet + frame table; carry them along
+  for (const asset of ["gfx.gtg", "gfx.gsi"]) {
+    if (existsSync(path.join(dir, asset))) {
+      await cp(path.join(dir, asset), path.join(EX_OUT, ex.name, asset));
+      files.push(asset);
+    }
+  }
+  examples.push({ name: ex.name, blurb: ex.blurb, files });
 }
 await writeFile(path.join(EX_OUT, "manifest.json"), JSON.stringify({ examples }));
 console.log("staged examples -> public/examples (" + examples.map((e) => e.name).join(", ") + ")");
