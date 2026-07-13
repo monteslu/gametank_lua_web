@@ -94,6 +94,22 @@ export class FmPreview {
     this.voice(instr | 0, noteToFreq(midi), ctx.currentTime + 0.01, durSec, vel);
   }
 
+  // Play one tracker step's notes right now. `cells` is a 4-length array of
+  // (note | {note,vel} | 0); `instruments` is the 4 channel instruments;
+  // durSec is the step length. Used by the live step-clock in the editor so
+  // edits take effect on the next step (instead of a scheduled snapshot).
+  playStep(cells, instruments, durSec) {
+    const ctx = this.ensure();
+    const t = ctx.currentTime + 0.005;
+    for (let ch = 0; ch < 4; ch++) {
+      const cell = cells[ch];
+      if (!cell) continue;
+      const note = typeof cell === "object" ? cell.note : cell;
+      const vel = typeof cell === "object" ? (cell.vel ?? 63) : 63;
+      if (note) this.voice((instruments[ch] | 0), noteToFreq(note), t, durSec, vel);
+    }
+  }
+
   play(song, { fps = 60, loop = false } = {}) {
     this.stop();
     const ctx = this.ensure();

@@ -44,6 +44,8 @@ const KEY_SEMITONE = {
  */
 export function MusicEditor({ song, onChange }) {
   const model = song;
+  const modelRef = useRef(model);   // live model for the playback clock to read
+  modelRef.current = model;
   const preview = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [playRow, setPlayRow] = useState(-1);
@@ -184,56 +186,43 @@ export function MusicEditor({ song, onChange }) {
   }, [onChange]);
   const exportGtm2 = useCallback(() => downloadBytes("song.gtm2", songToBytes(model), "application/octet-stream"), [model]);
 
-  // grid -> .gtm2 structured song (an event per NON-EMPTY step; delay = the
-  // per-step frame count so timing is even). Empty leading/trailing steps still
-  // advance time so the loop length is the full grid.
-  const toGtm2Song = useCallback(() => {
-    const events = [];
-    let pending = model.delay;   // frames since the last emitted event
-    for (let s = 0; s < model.steps; s++) {
-      const notes = {};
-      let any = false;
-      for (let ch = 0; ch < CHANNELS; ch++) {
-        const cell = model.grid[s][ch];
-        const note = noteOf(cell);
-        if (note) { notes[ch] = model.velocity ? { note, vel: velOf(cell) } : note; any = true; }
-      }
-      if (any) { events.push({ delay: pending, notes }); pending = model.delay; }
-      else pending += model.delay;
-    }
-    return { velocity: !!model.velocity, instruments: model.instruments, events };
-  }, [model]);
 
+  // Live step-clock playback: advance one step at a time, and at each step read
+  // the CURRENT model (via modelRef) to (a) play that step's notes and (b) retime
+  // the next step from the current tempo. So editing notes / steps / tempo while
+  // playing takes effect from the next step, not a snapshot from when you pressed
+  // play. Loops by wrapping the row on the live step count.
+  const playRunning = useRef(false);
+  const playTimer = useRef(0);
   const play = useCallback(() => {
-    const p = preview.current;
-    const s = toGtm2Song();
-    p.onFrame = (i) => {
-      if (i < 0) { setPlaying(false); setPlayRow(-1); return; }
-    };
-    // map event index back to a row for the playhead: rebuild step->event
-    p.play(s, { fps: 60, loop: true });
+    if (playRunning.current) return;
+    preview.current?.ensure();      // unlock audio (this is inside a click)
+    playRunning.current = true;
     setPlaying(true);
-    // simple playhead: step the row highlight on our own timer at delay/60s
-    const stepMs = (model.delay / 60) * 1000;
     let row = 0;
     const tick = () => {
-      if (!preview.current?.playing) return;
-      setPlayRow(row % model.steps);
+      if (!playRunning.current) return;
+      const m = modelRef.current;
+      const steps = Math.max(1, m.steps);
+      if (row >= steps) row = 0;                 // wrap on the LIVE step count
+      setPlayRow(row);
+      const stepSec = m.delay / 60;
+      preview.current?.playStep(m.grid[row] || [], m.instruments, Math.max(0.06, stepSec * 0.95));
       row++;
-      playTimer.current = setTimeout(tick, stepMs);
+      playTimer.current = setTimeout(tick, stepSec * 1000);
     };
     clearTimeout(playTimer.current);
     tick();
-  }, [toGtm2Song, model.delay, model.steps]);
+  }, []);
 
-  const playTimer = useRef(0);
   const stop = useCallback(() => {
-    preview.current?.stop();
+    playRunning.current = false;
     clearTimeout(playTimer.current);
+    preview.current?.stop();
     setPlaying(false); setPlayRow(-1);
   }, []);
 
-  useEffect(() => () => clearTimeout(playTimer.current), []);
+  useEffect(() => () => { playRunning.current = false; clearTimeout(playTimer.current); }, []);
 
   return (
     <div className="music-editor">
