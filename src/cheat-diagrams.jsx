@@ -15,7 +15,7 @@ const SUN = "var(--sun)";
 // --- 1. "the machine at a glance" - it's really a spec table -----------------
 const SPEC = [
   ["CPU", "65C02 @ 3.58 MHz (native, no VM)"],
-  ["Screen", "128 × 128 px, 256-color palette"],
+  ["Screen", "128 × 128 pixels, hundreds of colors"],
   ["Sprites", "one 128×128 sheet of 8×8 cells (0-255)"],
   ["Sound", "4-op FM on a second 65C02 (the ACP)"],
   ["Input", "2 controllers, 6 buttons + START each"],

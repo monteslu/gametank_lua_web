@@ -34,7 +34,7 @@ export function Cheatsheet() {
 
   useEffect(() => {
     if (cachedSegments) return;
-    fetch("/docs/CHEATSHEET.md")
+    fetch("/docs/CHEATSHEET.md", { cache: "no-cache" })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error("not found"))))
       .then((md) => { cachedSegments = buildSegments(md); setSegments(cachedSegments); })
       .catch((e) => setErr(String(e.message || e)));
