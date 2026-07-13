@@ -123,9 +123,7 @@ const EX_LIST = [
   { name: "combo-pool", from: PORTS, num8: true, blurb: "Combo Pool by NuSan (PICO-8 port). Merge balls, chain combos. CC-BY-NC-SA.", license: "Combo Pool (c) NuSan - CC-BY-NC-SA 4.0" },
   { name: "newleste", from: PORTS, blurb: "Celeste Classic (newleste.p8 port). Climb, jump, dash. GPL-3.0.", license: "Celeste Classic / newleste.p8 - Maddy Thorson, Noel Berry + CelesteClassic community - GPL-3.0" },
   { name: "orbit", from: SDK_EX, blurb: "Bouncing bodies with fixed-point math." },
-  { name: "pad-square", from: SDK_EX, blurb: "Move a square with the d-pad. Input demo." },
   { name: "audio", from: SDK_EX, blurb: "Built-in SFX and music." },
-  { name: "mathcheck", from: SDK_EX, blurb: "Fixed-point math self-test." },
 ];
 await rm(EX_OUT, { recursive: true, force: true });
 await mkdir(EX_OUT, { recursive: true });
