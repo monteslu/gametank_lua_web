@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { SHEET_DIM, QUAD_DIM, getPixel, setPixel, fromGtg, quadrantOf, setQuadrant, newSheet } from "./gtg.js";
+import { SHEET_DIM, QUAD_DIM, SHEET_BYTES, getPixel, setPixel, fromGtg, quadrantOf, setQuadrant, newSheet } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
 import { pngToSheet, rgbaToSheet } from "./png-import.js";
@@ -40,21 +40,21 @@ function drawSheet(ctx, sheet) {
 }
 
 // Draw the guide overlay onto a transparent canvas the same pixel size as the
-// zoomed sheet: the four 128x128 quadrant borders (the full GameTank GRAM page),
-// and the 16x16 8x8-cell grid inside the NW quadrant - that's the grid spr(n)
-// indexes (cells 0-255 all live in NW; NE/SW/SE are reached via .gsi frames).
+// zoomed sheet: the 8x8 cell grid across the whole 256x256 page (everything -
+// spr cells, .gsi frames, composed tiles - is 8px-aligned), plus brighter
+// borders on the four 128x128 quadrants. Only NW is spr(n)-addressable; the
+// hover readout makes that distinction.
 function drawGuides(ctx, zoom, showCells) {
   const px = SHEET_DIM * zoom;
   ctx.clearRect(0, 0, px, px);
   if (showCells) {
-    // faint 8x8 cell grid over the NW quadrant only
     ctx.strokeStyle = "rgba(255,255,255,0.12)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let i = 8; i < QUAD_DIM; i += 8) {
+    for (let i = 8; i < SHEET_DIM; i += 8) {
       const p = i * zoom + 0.5;
-      ctx.moveTo(p, 0); ctx.lineTo(p, QUAD_DIM * zoom);
-      ctx.moveTo(0, p); ctx.lineTo(QUAD_DIM * zoom, p);
+      ctx.moveTo(p, 0); ctx.lineTo(p, px);
+      ctx.moveTo(0, p); ctx.lineTo(px, p);
     }
     ctx.stroke();
   }
@@ -471,6 +471,15 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     const picked = await pickFile(".gtg");
     if (!picked) return;
     try {
+      // a 65536-byte file is a full 256x256 sheet (all four quadrants in one
+      // blob) - import the whole thing; the quadrant choice only applies to a
+      // real single-quadrant .gtg
+      if (picked.bytes.length === SHEET_BYTES) {
+        snapshot();
+        onChange(new Uint8Array(picked.bytes));
+        flash("that file is a full 256×256 sheet - imported all four quadrants");
+        return;
+      }
       const q = fromGtg(picked.bytes);           // validates 16384 bytes
       const buf = sheet ? new Uint8Array(sheet) : newSheet();
       setQuadrant(buf, quad, q);
@@ -516,7 +525,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
         <button className="tool icon import tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
         <button className="tool icon tip" onClick={() => setQuadModal("import")} data-tip="Import a .gtg quadrant file (picks the target quadrant next)" aria-label="import .gtg"><i className="ti ti-file-import" /></button>
         <button className="tool icon tip" onClick={() => setQuadModal("export")} data-tip="Export a quadrant as a .gtg file (picks the quadrant next)" aria-label="export .gtg"><i className="ti ti-file-export" /></button>
-        <label className="grid-toggle" title="show the 8x8 cell grid (NW) + quadrant borders">
+        <label className="grid-toggle" title="show the 8x8 cell grid + quadrant borders">
           <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> grid
         </label>
         <label className="zoom">zoom
