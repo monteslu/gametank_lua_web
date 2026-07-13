@@ -645,3 +645,21 @@ body {
   font: 13px system-ui, sans-serif;
 }
 .no-project .side-new { width: auto; padding: 8px 22px; }
+
+/* delete-project confirm */
+.confirm-box {
+  width: 360px; max-width: 90vw; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.confirm-title { font: 800 15px system-ui, sans-serif; color: var(--err); margin-bottom: 8px; }
+.confirm-text { font: 13px/1.5 system-ui, sans-serif; color: var(--fg); margin: 0 0 16px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-actions button {
+  padding: 7px 18px; font: 700 12px system-ui, sans-serif;
+  border-radius: 8px; cursor: pointer;
+}
+.confirm-cancel { color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); }
+.confirm-cancel:hover { border-color: var(--accent-2); }
+.confirm-danger { color: #fff; background: #b83a4e; border: 0; }
+.confirm-danger:hover { filter: brightness(1.15); }

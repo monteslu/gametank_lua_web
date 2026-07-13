@@ -349,6 +349,13 @@ export function App() {
 
   // --- project ops ---------------------------------------------------------
   const [showNew, setShowNew] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);   // { id, name } awaiting the user's ok
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const onKey = (e) => { if (e.key === "Escape") setConfirmDelete(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmDelete]);
   const newProject = useCallback(async () => {
     const files = { "main.lua": BLANK_SOURCE };
     files["project.json"] = writeManifest(defaultManifest("untitled"));
@@ -560,9 +567,24 @@ export function App() {
           currentId={currentId}
           onOpen={openProject}
           onNew={() => setShowNew(true)}
-          onDelete={removeProject}
+          onDelete={(id) => setConfirmDelete(projects.find((p) => p.id === id) ?? { id, name: "this project" })}
           onImport={importBundle}
         />
+        {confirmDelete && (
+          <div className="flash-modal" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
+            <div className="confirm-box">
+              <div className="confirm-title">Delete project?</div>
+              <p className="confirm-text">
+                <b>{confirmDelete.name}</b> and everything in it (code, sprites, music)
+                will be deleted. This can't be undone.
+              </p>
+              <div className="confirm-actions">
+                <button className="confirm-cancel" onClick={() => setConfirmDelete(null)}>Cancel</button>
+                <button className="confirm-danger" onClick={() => { removeProject(confirmDelete.id); setConfirmDelete(null); }}>Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
         {showNew && (
           <NewProjectModal
             onClone={forkExample}
