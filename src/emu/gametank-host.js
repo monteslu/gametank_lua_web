@@ -135,6 +135,8 @@ export class GameTankHost {
     this.ctx.imageSmoothingEnabled = false;   // crisp pixels; CSS does the scaling
     this.imageData = this.ctx.createImageData(this.fbWidth, this.fbHeight);
     this.running = true;
+    this._acc = 0;            // accumulated ms owed to the 60 Hz sim clock
+    this._lastT = 0;         // last rAF timestamp
     this._loop();
   }
 
@@ -154,6 +156,7 @@ export class GameTankHost {
   resume() {
     if (this.running || !this.mod) return;
     this.running = true;
+    this._acc = 0; this._lastT = 0;   // don't catch up the paused wall-clock gap
     if (this._audioCtx) {
       try { this._audioCtx.resume(); } catch { /* ignore */ }
       this._nextAudioTime = this._audioCtx.currentTime;
@@ -204,11 +207,28 @@ export class GameTankHost {
   /** Set a RetroPad id (PAD.*) directly. */
   setPad(padId, down) { this.buttons[padId] = down ? 1 : 0; }
 
-  _loop = () => {
+  // The GameTank runs at 60 fps. requestAnimationFrame fires at the DISPLAY
+  // refresh rate, which is 120/144 Hz on many modern monitors - running one
+  // retro_run() per rAF there makes the game run 2-2.4x too fast. Pace to a
+  // fixed 60 Hz wall clock: accumulate elapsed ms and run exactly as many
+  // emulator frames as are owed (usually 1, sometimes 0 on a fast display),
+  // capped so a stall doesn't spiral into a long catch-up burst.
+  _FRAME_MS = 1000 / 60;
+  _loop = (now) => {
     if (!this.running || !this.mod) return;
-    this.mod._retro_run();
-    this._present();
-    this._flushAudio();
+    if (typeof now !== "number") now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    if (!this._lastT) this._lastT = now;
+    this._acc += now - this._lastT;
+    this._lastT = now;
+    if (this._acc > 250) this._acc = 250;   // cap catch-up (dropped tab / stall)
+    let ran = false;
+    while (this._acc >= this._FRAME_MS) {
+      this._acc -= this._FRAME_MS;
+      this.mod._retro_run();
+      this._flushAudio();
+      ran = true;
+    }
+    if (ran) this._present();   // present only when the sim advanced
     this._rafId = requestAnimationFrame(this._loop);
   };
 

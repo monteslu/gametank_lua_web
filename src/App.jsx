@@ -156,7 +156,8 @@ export function App() {
     if (typeof window === "undefined" || !window.__gtlua_test) return;
     window.__gtlua_test.setSource = (t) => onChange(t);
     window.__gtlua_test.getSource = () => source;
-  }, [onChange, source]);
+    window.__gtlua_test.getHost = () => host;
+  }, [onChange, source, host]);
 
   // Write a 256x256 sheet into a project record as quadrant files: present
   // quadrants (splitSheet omits empty NE/SW/SE) are written, and any quadrant
