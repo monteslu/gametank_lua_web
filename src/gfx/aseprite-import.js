@@ -147,3 +147,40 @@ export async function aseToRgba(bytes, frameIndex = 0) {
   img.tags = ase.tags;
   return img;
 }
+
+/**
+ * Import a multi-frame Aseprite as a packed sheet + frame table. Every frame is
+ * flattened and laid out left-to-right / top-to-bottom on the 128x128 sheet (a
+ * grid of frameW x frameH cells); each gets a .gsi frame record {vxo,vyo,w,h,
+ * gx,gy} with a centered anchor. So an Aseprite walk-cycle becomes a ready-to-
+ * animate .gtg + .gsi pair (sprf).
+ * @returns { rgba: {width,height,rgba}, frames: [{vxo,vyo,w,h,gx,gy}], tags, nFrames }
+ */
+export async function aseToSheetAndFrames(bytes) {
+  const ase = await parseAseprite(bytes);
+  const { width: fw, height: fh } = ase;
+  const SHEET = 128;
+  const cols = Math.max(1, Math.floor(SHEET / fw));
+  const rows = Math.max(1, Math.floor(SHEET / fh));
+  const capacity = cols * rows;
+  const nFrames = Math.min(ase.frames.length, capacity);
+
+  // composite each frame into its grid cell of one big RGBA sheet
+  const sheet = new Uint8Array(SHEET * SHEET * 4);
+  const frames = [];
+  for (let f = 0; f < nFrames; f++) {
+    const cx = (f % cols) * fw;
+    const cy = Math.floor(f / cols) * fh;
+    const img = await flattenFrame(ase, f);
+    for (let y = 0; y < fh && cy + y < SHEET; y++) {
+      for (let x = 0; x < fw && cx + x < SHEET; x++) {
+        const si = (y * fw + x) * 4;
+        if (!img.rgba[si + 3]) continue;
+        const oi = ((cy + y) * SHEET + (cx + x)) * 4;
+        sheet[oi] = img.rgba[si]; sheet[oi + 1] = img.rgba[si + 1]; sheet[oi + 2] = img.rgba[si + 2]; sheet[oi + 3] = 255;
+      }
+    }
+    frames.push({ vxo: -(fw >> 1), vyo: -(fh >> 1), w: fw, h: fh, gx: cx, gy: cy });
+  }
+  return { rgba: { width: SHEET, height: SHEET, rgba: sheet }, frames, tags: ase.tags, nFrames, dropped: ase.frames.length - nFrames };
+}

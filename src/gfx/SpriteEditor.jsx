@@ -3,7 +3,7 @@ import { SHEET_DIM, getPixel, setPixel, fromGtg, toGtg } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
 import { pngToSheet, rgbaToSheet } from "./png-import.js";
-import { aseToRgba } from "./aseprite-import.js";
+import { aseToRgba, aseToSheetAndFrames, parseAseprite } from "./aseprite-import.js";
 import { pickFile, downloadBytes } from "../util/download.js";
 
 const TOOLS = ["pencil", "eraser", "fill", "line", "rect"];
@@ -34,7 +34,7 @@ function drawSheet(ctx, sheet) {
  * bytes; onChange fires with a NEW array after each edit (immutable so React
  * and autosave see the change). Tools: pencil, eraser, fill, line, rect.
  */
-export function SpriteEditor({ sheet, onChange }) {
+export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const canvasRef = useRef(null);
   const [zoom, setZoom] = useState(4);
   const [tool, setTool] = useState("pencil");
@@ -144,14 +144,28 @@ export function SpriteEditor({ sheet, onChange }) {
     const picked = await pickFile(".png,.ase,.aseprite,image/png");
     if (!picked) return;
     try {
-      const isAse = /\.(ase|aseprite)$/i.test(picked.name) || picked.bytes[4] === 0xe0 && picked.bytes[5] === 0xa5;
-      let result;
-      if (isAse) result = rgbaToSheet(await aseToRgba(picked.bytes));
-      else result = await pngToSheet(picked.bytes);
+      const isAse = /\.(ase|aseprite)$/i.test(picked.name) || (picked.bytes[4] === 0xe0 && picked.bytes[5] === 0xa5);
+      if (isAse) {
+        const ase = await parseAseprite(picked.bytes);
+        // multi-frame .ase + animation support -> pack all frames into the sheet
+        // and generate a .gsi frame table so it's ready to animate with sprf.
+        if (ase.frames.length > 1 && onImportAnimation) {
+          const anim = await aseToSheetAndFrames(picked.bytes);
+          const { sheet: packed } = rgbaToSheet(anim.rgba);
+          onImportAnimation(packed, anim.frames);
+          flash(`imported ${anim.nFrames} frames as an animation${anim.dropped ? ` (${anim.dropped} didn't fit)` : ""}`);
+          return;
+        }
+        const result = rgbaToSheet(await aseToRgba(picked.bytes));
+        onChange(result.sheet);
+        flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
+        return;
+      }
+      const result = await pngToSheet(picked.bytes);
       onChange(result.sheet);
       flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
     } catch (e) { flash(`import failed: ${e.message}`); }
-  }, [onChange]);
+  }, [onChange, onImportAnimation]);
 
   // raw .gtg import/export - the exact file a C-SDK build consumes, so assets
   // round-trip between our editor and a C GameTank project.

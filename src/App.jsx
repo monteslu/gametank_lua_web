@@ -148,6 +148,19 @@ export function App() {
     }, 500);
   }, [currentId, refreshProjects]);
 
+  // importing a multi-frame Aseprite: set BOTH the packed sheet and the carved
+  // .gsi frames, then jump to the frames view to preview the animation.
+  const onImportAnimation = useCallback(async (buf, frameList) => {
+    setSheet(buf); setFrames(frameList); setView("frames");
+    if (!currentId) return;
+    const rec = await getProject(currentId);
+    if (!rec) return;
+    rec.files["gfx.gtg"] = buf;
+    rec.files["gfx.gsi"] = encodeGsi(frameList);
+    await saveProject(rec, Date.now());
+    refreshProjects();
+  }, [currentId, refreshProjects]);
+
   // create an empty sprite sheet for this project + switch to the sprite view
   const addSheet = useCallback(async () => {
     const buf = newSheet();
@@ -394,7 +407,7 @@ export function App() {
                 <Editor value={source} onChange={onChange} diagnostics={result.diagnostics} />
               </Suspense>
             )}
-            {view === "sprite" && <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
+            {view === "sprite" && <SpriteEditor sheet={sheet} onChange={onSheetChange} onImportAnimation={onImportAnimation} />}
             {view === "frames" && <FrameEditor sheet={sheet} frames={frames || []} onChange={onFramesChange} />}
             {view === "music" && (
               <div className="music-pane-wrap">
