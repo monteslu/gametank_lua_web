@@ -27,32 +27,27 @@ try {
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".sidebar");
-  await page.click(".tab.add >> text=+ sprites");
-  await page.waitForSelector(".sprite-canvas");
+  // Unit-level: parse the real .ase and flatten a single frame -> sheet. (The
+  // UI's multi-frame path is covered by browser-ase-anim.mjs; here we verify the
+  // single-frame flatten + nearest-color that both paths rely on.) We fetch the
+  // .ase bytes by base64-injecting them into the page.
+  const b64 = (await import("node:fs")).readFileSync(ASE).toString("base64");
+  const res = await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const { parseAseprite, aseToRgba } = await import("/src/gfx/aseprite-import.js");
+    const { rgbaToSheet } = await import("/src/gfx/png-import.js");
+    const ase = await parseAseprite(bytes);
+    const img = await aseToRgba(bytes, 0);
+    const { sheet } = rgbaToSheet(img);
+    let painted = 0; const colors = new Set();
+    for (const b of sheet) if (b) { painted++; colors.add(b); }
+    return { w: ase.width, h: ase.height, frames: ase.frames.length, tags: ase.tags.length, painted, colors: colors.size };
+  }, b64);
 
-  // import the real .ase via the file chooser
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click(".tool.import")]);
-  await chooser.setFiles(ASE);
-  await page.waitForSelector(".import-msg", { timeout: 8000 });
-  await page.waitForTimeout(400);
-
-  const msg = await page.locator(".import-msg").textContent();
-  check("import reported a size", /imported \d+×\d+/.test(msg));
-
-  const painted = await page.evaluate(() => {
-    const c = document.querySelector(".sprite-canvas");
-    const { data } = c.getContext("2d").getImageData(0, 0, 128, 128);
-    let n = 0; const colors = new Set();
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i], g = data[i + 1], b = data[i + 2];
-      const isChecker = Math.abs(r - g) < 3 && r <= 48;
-      if (!isChecker) { n++; colors.add((r << 16) | (g << 8) | b); }
-    }
-    return { n, colors: colors.size };
-  });
-  console.log("     imported non-transparent pixels:", painted.n, "colors:", painted.colors);
-  check("aseprite pixels landed in the sheet", painted.n > 100);
-  check("multiple palette colors mapped", painted.colors >= 3);
+  check("parsed dims + frames + tag", res.w === 32 && res.h === 32 && res.frames === 9 && res.tags === 1);
+  console.log("     flattened frame 0:", res.painted, "px,", res.colors, "colors");
+  check("frame 0 flattened to sheet bytes", res.painted > 100);
+  check("multiple palette colors mapped", res.colors >= 3);
 
   await browser.close();
 } catch (e) {

@@ -1,33 +1,74 @@
 # gametank_lua_web
 
-Web IDE for [gt-lua](../gametank_lua_sdk): write GameTank games in Lua, build and
-play them in the browser. Companion to the `gametank_lua_sdk` clone-and-build CLI.
+A browser IDE for making [GameTank](https://gametank.zone) games in Lua — write
+code, draw sprites, compose music, build a real `.gtr` cart, run it in the
+emulator, and flash it to actual hardware, all in a tab. No install.
 
-Plain JS (ESM + JSDoc, no TypeScript) + Vite + React, matching house style.
+It's the companion to the [`gtlua`](https://www.npmjs.com/package/gtlua)
+clone-and-build CLI, and it uses the **exact same compiler and toolchain**: the
+browser produces carts byte-for-byte identical to the CLI (verified on the full
+EEPROM32K + FLASH2M banking pipeline).
 
-## Status
+Plain JS (ESM + JSDoc, no TypeScript) + Vite + React.
 
-Early. Working so far:
+## What's in it
 
-- **Live diagnostics**: the real gt-lua compiler (`compile()`, pure JS, zero node
-  deps) runs in-browser on every edit and reports positioned errors/warnings.
-  Our compiler *is* the language service - no LSP backend.
-- Code editor (textarea + diagnostic gutter; Monaco next) and a generated-C peek.
-
-Next (see `../internal-gtlua/WEB_IDE_PLAN.md`):
-
-- Monaco editor with the gt-lua language (highlighting, completions, hover).
-- Browser build: the WASM cc65/ca65/ld65 toolchain (reusing the SDK's
-  `wasm_worker.js` runTool core) driven over rawr -> a real `.gtr`.
-- Emulator pane (the GameTank core to a canvas; copy `bin/gtlua-run.mjs`).
-- Sprite/animation/SFX/music editors, importers, projects, Web Serial flashing.
+- **Code editor** — Monaco (the VS Code editor), with its built-in Lua
+  highlighting, gt-lua completions, and **live diagnostics** from the real
+  compiler on every keystroke (our compiler *is* the language service).
+- **Build & run** — Play (Ctrl-R) compiles Lua → C → cc65/ca65/ld65 (all WASM,
+  in a warm Web Worker) → a `.gtr`, then runs it live in the **emulator** on the
+  real GameTank libretro core. Click the screen to play; keyboard = the pad.
+- **Sprite editor** — pencil/fill/line/rect/eraser, zoom, the hardware-accurate
+  256-color palette. Import PNG or Aseprite.
+- **Animation** — carve `.gsi` frames over the sheet, set anchors, and
+  play-preview the walk cycle. A multi-frame Aseprite imports as a ready-to-run
+  animation (packed sheet + frames).
+- **Music** — a 4-channel FM step tracker with a Web Audio preview; import MIDI;
+  "use in game" drops the song into your code.
+- **Debugger** — a live hex view of the running machine's RAM, click-to-edit.
+- **Projects** — saved in the browser (IndexedDB), with forkable examples.
+  Export a `.gtr` cart or a `.gtlua` project bundle.
+- **⚡ Flash to hardware** — over Web Serial, drives Clyde Shaffer's GTFO
+  programmer to write your cart to a real GameTank (Chrome/Edge, or Firefox
+  151+).
+- **C-SDK interop** — the editors read/write Clyde's exact `.gtg`/`.gsi`/`.gtm2`
+  formats, so C developers can use them as an asset workbench too (raw
+  import/export in each editor).
 
 ## Dev
 
+Requires **Node 24+** (the bundled WASM cores need WASM threading/SIMD).
+
 ```sh
-npm install
-npm run dev      # http://localhost:5173
+npm install        # also stages the toolchain/core/examples into public/
+npm run dev        # http://localhost:5173
 ```
 
-Cross-origin isolation headers are set in `vite.config.js` (the WASM tools use
-SharedArrayBuffer).
+`npm install` runs `scripts/stage-toolchain.mjs`, which copies the cc65 WASM
+toolchain, the GameTank core, the SDK runtime, and the example games out of the
+`gtlua` package into `public/` (all gitignored — regenerate with `npm run
+stage`). Cross-origin isolation headers are set in `vite.config.js` (the WASM
+tools use SharedArrayBuffer).
+
+## Tests
+
+Playwright drives a real headless Chromium against the running app. Each
+`test/browser-*.mjs` spins up its own Vite instance and checks one slice
+end-to-end (build, play, sprite/frame/music editors, importers, debugger,
+flasher, C-SDK interop). Run one with `node test/browser-<name>.mjs`.
+
+## Layout
+
+- `src/App.jsx` — the shell (projects, tabs, build/play, export, flash).
+- `src/Editor.jsx` — Monaco + the gt-lua language layer.
+- `src/build/` — the Web Worker that runs the SDK's real `build()` over an
+  in-memory VFS via a synchronous cc65 glue.
+- `src/emu/` — the browser GameTank host (canvas + Web Audio) + RAM debugger.
+- `src/gfx/` — palette, `.gtg` sheet, `.gsi` frames, PNG/Aseprite import.
+- `src/audio/` — `.gtm2` tracker, FM preview synth, MIDI import.
+- `src/flash/` — the Web Serial cart flasher.
+- `src/projects/` — IndexedDB store, `.gtlua` zip bundle, examples.
+
+Design notes and the full roadmap live in `../internal-gtlua/WEB_IDE_PLAN.md`
+(internal, not shipped).
