@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "postinstall": "node scripts/stage-toolchain.mjs",
     "stage": "node scripts/stage-toolchain.mjs",
+    "test": "node test/run-all.mjs",
+    "test:fast": "node test/run-all.mjs --fast",
     "test:browser": "node test/browser-build.mjs"
   },
   "dependencies": {
