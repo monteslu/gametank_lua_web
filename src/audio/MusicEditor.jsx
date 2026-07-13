@@ -254,11 +254,10 @@ export function MusicEditor({ song, onChange }) {
         <button className="tool" onClick={exportGtm2} title="export the song as a raw .gtm2 (for a C project)">.gtm2 ▴</button>
       </div>
 
-      {/* piano note picker - the note placed when you click a grid cell */}
+      {/* piano note picker - two full-width rows: info/controls, then the piano */}
       <div className="music-piano-bar">
         <div className="mpb-info">
           <span className="mpb-label">note <b>{nameOf(pitch)}</b></span>
-          <span className="mpb-kbd">play with the keyboard: Z/S/X… row = oct {baseOctave}, Q/2/W… = oct {baseOctave + 1} · [ ] change octave</span>
           <label className="mpb-vel" title="per-note velocity (loudness, 0-63). On: notes carry velocity; the slider sets new notes + the cursor note.">
             <input type="checkbox" checked={!!model.velocity}
               onChange={(e) => onChange({ ...model, velocity: e.target.checked })} />
@@ -267,6 +266,7 @@ export function MusicEditor({ song, onChange }) {
               onChange={(e) => { const v = +e.target.value; setVel(v); if (model.velocity) setCellVel(v); }} />
             <b>{model.velocity ? vel : "—"}</b>
           </label>
+          <span className="mpb-kbd">keyboard: Z/S/X… = oct {baseOctave}, Q/2/W… = oct {baseOctave + 1} · [ ] octave</span>
         </div>
         <Piano value={pitch} onChange={setPitch} onPreview={(m) => previewNote(m, vel)} baseOctave={baseOctave} />
       </div>
