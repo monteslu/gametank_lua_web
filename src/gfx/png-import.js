@@ -37,18 +37,26 @@ export function decodePngToRgba(bytes) {
  * @param {Uint8Array} pngBytes
  * @param {{alphaCutoff?: number}} [opts]
  */
-export async function pngToSheet(pngBytes, { alphaCutoff = 128 } = {}) {
-  const { width, height, rgba } = await decodePngToRgba(pngBytes);
+/**
+ * RGBA image -> a 128x128 .gtg sheet via nearest-color. Shared by PNG and
+ * Aseprite import. Transparent pixels (alpha < cutoff) -> byte 0. Cropped to
+ * the top-left 128x128.
+ */
+export function rgbaToSheet({ width, height, rgba }, { alphaCutoff = 128 } = {}) {
   const sheet = newSheet();
   const w = Math.min(width, SHEET_DIM);
   const h = Math.min(height, SHEET_DIM);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const o = (y * width + x) * 4;
-      const a = rgba[o + 3];
-      if (a < alphaCutoff) continue;   // stays byte 0 (transparent)
+      if (rgba[o + 3] < alphaCutoff) continue;   // stays byte 0 (transparent)
       sheet[y * SHEET_DIM + x] = nearestColorByte(rgba[o], rgba[o + 1], rgba[o + 2]);
     }
   }
   return { sheet, width, height, cropped: width > SHEET_DIM || height > SHEET_DIM };
+}
+
+export async function pngToSheet(pngBytes, opts) {
+  const img = await decodePngToRgba(pngBytes);
+  return rgbaToSheet(img, opts);
 }

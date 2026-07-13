@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { SHEET_DIM, getPixel, setPixel } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
-import { pngToSheet } from "./png-import.js";
+import { pngToSheet, rgbaToSheet } from "./png-import.js";
+import { aseToRgba } from "./aseprite-import.js";
 import { pickFile } from "../util/download.js";
 
 const TOOLS = ["pencil", "eraser", "fill", "line", "rect"];
@@ -138,13 +139,16 @@ export function SpriteEditor({ sheet, onChange }) {
   }, []);
 
   const [importMsg, setImportMsg] = useState("");
-  const importPng = useCallback(async () => {
-    const picked = await pickFile(".png,image/png");
+  const importImage = useCallback(async () => {
+    const picked = await pickFile(".png,.ase,.aseprite,image/png");
     if (!picked) return;
     try {
-      const { sheet: next, width, height, cropped } = await pngToSheet(picked.bytes);
-      onChange(next);
-      setImportMsg(`imported ${width}×${height}${cropped ? " (cropped to 128×128)" : ""}`);
+      const isAse = /\.(ase|aseprite)$/i.test(picked.name) || picked.bytes[4] === 0xe0 && picked.bytes[5] === 0xa5;
+      let result;
+      if (isAse) result = rgbaToSheet(await aseToRgba(picked.bytes));
+      else result = await pngToSheet(picked.bytes);
+      onChange(result.sheet);
+      setImportMsg(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
       setTimeout(() => setImportMsg(""), 4000);
     } catch (e) {
       setImportMsg(`import failed: ${e.message}`);
@@ -160,7 +164,7 @@ export function SpriteEditor({ sheet, onChange }) {
         ))}
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
-        <button className="tool import" onClick={importPng} title="import a PNG (nearest-color to the GameTank palette)">import PNG</button>
+        <button className="tool import" onClick={importImage} title="import a PNG or Aseprite file (nearest-color to the GameTank palette)">import image</button>
         <label className="zoom">zoom
           <input type="range" min="2" max="10" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
           {zoom}x
