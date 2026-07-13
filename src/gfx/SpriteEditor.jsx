@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { SHEET_DIM, getPixel, setPixel } from "./gtg.js";
+import { SHEET_DIM, getPixel, setPixel, fromGtg, toGtg } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
 import { pngToSheet, rgbaToSheet } from "./png-import.js";
 import { aseToRgba } from "./aseprite-import.js";
-import { pickFile } from "../util/download.js";
+import { pickFile, downloadBytes } from "../util/download.js";
 
 const TOOLS = ["pencil", "eraser", "fill", "line", "rect"];
 
@@ -139,6 +139,7 @@ export function SpriteEditor({ sheet, onChange }) {
   }, []);
 
   const [importMsg, setImportMsg] = useState("");
+  const flash = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 4000); };
   const importImage = useCallback(async () => {
     const picked = await pickFile(".png,.ase,.aseprite,image/png");
     if (!picked) return;
@@ -148,13 +149,21 @@ export function SpriteEditor({ sheet, onChange }) {
       if (isAse) result = rgbaToSheet(await aseToRgba(picked.bytes));
       else result = await pngToSheet(picked.bytes);
       onChange(result.sheet);
-      setImportMsg(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
-      setTimeout(() => setImportMsg(""), 4000);
-    } catch (e) {
-      setImportMsg(`import failed: ${e.message}`);
-      setTimeout(() => setImportMsg(""), 4000);
-    }
+      flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
+    } catch (e) { flash(`import failed: ${e.message}`); }
   }, [onChange]);
+
+  // raw .gtg import/export - the exact file a C-SDK build consumes, so assets
+  // round-trip between our editor and a C GameTank project.
+  const importGtg = useCallback(async () => {
+    const picked = await pickFile(".gtg");
+    if (!picked) return;
+    try { onChange(fromGtg(picked.bytes)); flash("imported .gtg sheet"); }
+    catch (e) { flash(`import failed: ${e.message}`); }
+  }, [onChange]);
+  const exportGtg = useCallback(() => {
+    downloadBytes("sheet.gtg", toGtg(sheet), "application/octet-stream");
+  }, [sheet]);
 
   return (
     <div className="sprite-editor">
@@ -165,6 +174,8 @@ export function SpriteEditor({ sheet, onChange }) {
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
         <button className="tool import" onClick={importImage} title="import a PNG or Aseprite file (nearest-color to the GameTank palette)">import image</button>
+        <button className="tool" onClick={importGtg} title="import a raw .gtg sheet (e.g. from a C project)">.gtg ▾</button>
+        <button className="tool" onClick={exportGtg} title="export the sheet as a raw .gtg (for a C project)">.gtg ▴</button>
         <label className="zoom">zoom
           <input type="range" min="2" max="10" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
           {zoom}x

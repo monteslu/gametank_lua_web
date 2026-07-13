@@ -71,3 +71,36 @@ export function toHex(bytes) {
   for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, "0");
   return s;
 }
+
+/**
+ * Reconstruct the tracker grid model from a .gtm2 blob (best-effort: the .gtm2
+ * has variable per-event delays; we quantize onto a fixed step where 1 step =
+ * the smallest non-zero delay, so an evenly-timed song round-trips well and an
+ * irregular one is approximated). Lets a C-project .gtm2 load into the editor.
+ */
+export function gtm2ToModel(bytes) {
+  const song = parseGtm2(bytes);
+  const evs = song.events;
+  // step size = gcd-ish: use the smallest positive delay as the grid unit
+  const delays = evs.map((e) => e.delay | 0).filter((d) => d > 0);
+  const unit = delays.length ? Math.max(2, Math.min(...delays)) : 8;
+  // place events on steps by accumulated frame time. Zero-base so the first
+  // event lands on step 0 (the leading delay is the lead-in, not a real gap);
+  // this makes an evenly-timed song round-trip byte-stable through the grid.
+  let frame = -(evs.length ? (evs[0].delay | 0) : 0);
+  const placed = [];
+  for (const e of evs) {
+    frame += e.delay | 0;
+    const step = Math.round(frame / unit);
+    const notes = [0, 0, 0, 0];
+    for (const ch of [0, 1, 2, 3]) {
+      const n = e.notes && e.notes[ch];
+      if (n !== undefined && n !== null) notes[ch] = typeof n === "object" ? n.note : n;
+    }
+    placed.push({ step, notes });
+  }
+  const steps = Math.max(4, Math.min(64, (placed.length ? placed[placed.length - 1].step : 0) + 1));
+  const grid = Array.from({ length: steps }, () => [0, 0, 0, 0]);
+  for (const p of placed) if (p.step < steps) grid[p.step] = p.notes;
+  return { steps, delay: unit, instruments: song.instruments.slice(0, 4), grid };
+}

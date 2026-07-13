@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { SHEET_DIM } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
-import { frameFromRect, clampFrame } from "./gsi.js";
+import { frameFromRect, clampFrame, parseGsi, encodeGsi } from "./gsi.js";
+import { pickFile, downloadBytes } from "../util/download.js";
 
 // Paint the sheet (same transparency checker as the sprite editor) into a canvas.
 function paintSheet(ctx, sheet) {
@@ -119,6 +120,17 @@ export function FrameEditor({ sheet, frames, onChange }) {
     setSel(j);
   };
 
+  // raw .gsi import/export - the exact frame-table file a C-SDK build consumes.
+  const [msg, setMsg] = useState("");
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 4000); };
+  const importGsi = useCallback(async () => {
+    const picked = await pickFile(".gsi");
+    if (!picked) return;
+    try { const f = parseGsi(picked.bytes); onChange(f); setSel(f.length ? 0 : -1); flash(`imported ${f.length} frames`); }
+    catch (e) { flash(`import failed: ${e.message}`); }
+  }, [onChange]);
+  const exportGsi = useCallback(() => downloadBytes("frames.gsi", encodeGsi(frames), "application/octet-stream"), [frames]);
+
   // --- playback ------------------------------------------------------------
   useEffect(() => {
     if (!playing || frames.length === 0) return;
@@ -143,6 +155,9 @@ export function FrameEditor({ sheet, frames, onChange }) {
       <div className="frame-toolbar">
         <span className="fe-hint">drag on the sheet to carve a frame</span>
         <span className="tb-sep" />
+        {msg && <span className="import-msg">{msg}</span>}
+        <button className="tool" onClick={importGsi} title="import a raw .gsi frame table (e.g. from a C project)">.gsi ▾</button>
+        <button className="tool" onClick={exportGsi} title="export the frame table as a raw .gsi (for a C project)">.gsi ▴</button>
         <label className="zoom">zoom
           <input type="range" min="2" max="8" value={zoom} onChange={(e) => setZoom(+e.target.value)} />{zoom}x
         </label>

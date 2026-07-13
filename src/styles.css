@@ -167,15 +167,14 @@ body {
   display: flex; align-items: center; gap: 6px; padding: 8px 12px;
   border-bottom: 1px solid var(--line); background: var(--panel);
 }
-.sprite-toolbar .tool {
+.sprite-toolbar .tool, .music-toolbar .tool, .frame-toolbar .tool {
   font: 700 12px system-ui, sans-serif; color: var(--fg); background: var(--panel-2);
   border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer;
 }
-.sprite-toolbar .tool:hover { border-color: var(--grape); }
+.sprite-toolbar .tool:hover, .music-toolbar .tool:hover, .frame-toolbar .tool:hover { border-color: var(--grape); }
 .sprite-toolbar .tool.sel { background: linear-gradient(180deg, #ffa3d6, var(--accent)); color: #2a0b1e; border-color: var(--accent); }
 .sprite-toolbar .tool.import, .music-toolbar .tool.import { color: var(--accent-2); border-color: var(--accent-2); }
-.sprite-toolbar .import-msg, .music-toolbar .import-msg { font: 11px var(--mono); color: var(--ok); }
-.music-toolbar .tool { font: 700 12px system-ui, sans-serif; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.sprite-toolbar .import-msg, .music-toolbar .import-msg, .frame-toolbar .import-msg { font: 11px var(--mono); color: var(--ok); }
 .sprite-toolbar .tb-sep { flex: 1; }
 .sprite-toolbar .zoom { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--dim); }
 .sprite-body { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }

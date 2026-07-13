@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { INSTRUMENT_LIST, encodeGtm2, noteNum } from "./gtm2.js";
+import { INSTRUMENT_LIST, encodeGtm2, noteNum, gtm2ToModel } from "./gtm2.js";
 import { FmPreview } from "./fm-preview.js";
 import { midiToSong } from "./midi-import.js";
-import { pickFile } from "../util/download.js";
+import { pickFile, downloadBytes } from "../util/download.js";
 
 const CHANNELS = 4;
 // note names for the picker, C2..C6 (a comfortable tracker range). Value is
@@ -67,6 +67,16 @@ export function MusicEditor({ song, onChange }) {
       setTimeout(() => setImportMsg(""), 5000);
     }
   }, [model.instruments, onChange]);
+
+  // raw .gtm2 import/export - the exact song file a C-SDK build embeds.
+  const flashMsg = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 5000); };
+  const importGtm2 = useCallback(async () => {
+    const picked = await pickFile(".gtm2");
+    if (!picked) return;
+    try { onChange(gtm2ToModel(picked.bytes)); flashMsg("imported .gtm2 song"); }
+    catch (e) { flashMsg("import failed: " + e.message); }
+  }, [onChange]);
+  const exportGtm2 = useCallback(() => downloadBytes("song.gtm2", songToBytes(model), "application/octet-stream"), [model]);
 
   // grid -> .gtm2 structured song (an event per NON-EMPTY step; delay = the
   // per-step frame count so timing is even). Empty leading/trailing steps still
@@ -133,6 +143,8 @@ export function MusicEditor({ song, onChange }) {
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
         <button className="tool import" onClick={importMidi} title="import a MIDI file (re-interpreted as 4-channel FM)">import MIDI</button>
+        <button className="tool" onClick={importGtm2} title="import a raw .gtm2 song (e.g. from a C project)">.gtm2 ▾</button>
+        <button className="tool" onClick={exportGtm2} title="export the song as a raw .gtm2 (for a C project)">.gtm2 ▴</button>
         <label className="m-field">note
           <select value={pitch} onChange={(e) => setPitch(+e.target.value)}>
             {NOTE_NAMES.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
