@@ -346,9 +346,31 @@ body {
 
 /* emulator */
 .emu { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0b0d12; }
+/* emulator titlebar: label + an icon-only fullscreen button */
+.emu-titlebar { display: flex; align-items: center; justify-content: space-between; }
+.emu-fs {
+  background: none; border: 0; color: var(--dim); cursor: pointer; padding: 0 2px;
+  font-size: 15px; line-height: 1; border-radius: 5px;
+}
+.emu-fs:hover { color: var(--accent-2); }
+
 .emu-screen {
   flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
   min-height: 0; padding: 12px; overflow: hidden; outline: none; cursor: pointer;
+}
+/* when fullscreened, the screen is the whole viewport: center the canvas and let
+   it grow to the largest square that fits, still crisp (pixelated). */
+.emu-screen:fullscreen { padding: 0; background: #000; }
+/* the game is square (128x128); in fullscreen make it the largest square that
+   fits the viewport, still crisp. Override the pane's min/max sizing explicitly. */
+.emu-screen:fullscreen .emu-canvas {
+  width: min(100vw, 100vh) !important;
+  height: min(100vw, 100vh) !important;
+  min-width: 0 !important; min-height: 0 !important; max-width: none !important;
+}
+.emu-screen:-webkit-full-screen .emu-canvas {
+  width: min(100vw, 100vh); height: min(100vw, 100vh);
+  min-width: 0; min-height: 0; max-width: none;
 }
 /* when the emulator holds the keyboard, show a glowing frame so it's obvious
    which pane owns input (editor vs game) */

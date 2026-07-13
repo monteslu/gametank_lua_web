@@ -73,8 +73,22 @@ export function EmulatorPane({ rom, onHost }) {
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
+  const goFullscreen = () => {
+    const el = screenRef.current;
+    if (!el) return;
+    // fullscreen also SELECTS the emulator (grabs input) if it wasn't already
+    el.focus();
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (document.fullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); }
+    else if (req) req.call(el);
+  };
+
   return (
     <div className="emu">
+      <div className="pane-title emu-titlebar">
+        <span>emulator</span>
+        <button className="emu-fs" onClick={goFullscreen} title="fullscreen (also grabs the controls)" aria-label="fullscreen">⛶</button>
+      </div>
       <div
         className={"emu-screen" + (focused ? " focused" : "")}
         ref={screenRef}
