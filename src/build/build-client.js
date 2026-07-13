@@ -19,7 +19,7 @@ function ensureWorker() {
     if (!p) return;
     if (type === "progress") { p.onProgress?.(e.data.msg); return; }
     pending.delete(id);
-    if (type === "done") p.resolve(e.data);
+    if (type === "done" || type === "warm-done") p.resolve(e.data);
     else if (type === "error") p.reject(new Error(e.data.message || "build failed"));
   };
   worker.onerror = (e) => {
@@ -28,6 +28,24 @@ function ensureWorker() {
     pending.clear();
   };
   return worker;
+}
+
+/**
+ * Create the build worker and start warming it (compile the WASM tools + fetch
+ * the share/SDK trees) NOW - call once on app mount. The worker also self-warms
+ * on creation, so this mainly ensures the worker EXISTS early; the returned
+ * promise resolves when warmup is done. Idempotent.
+ */
+let warmed = null;
+export function prewarm() {
+  if (warmed) return warmed;
+  const w = ensureWorker();
+  const id = nextId++;
+  warmed = new Promise((resolve) => {
+    pending.set(id, { resolve, reject: resolve });   // resolve either way; warmup is best-effort
+    w.postMessage({ type: "warm", id });
+  });
+  return warmed;
 }
 
 /**

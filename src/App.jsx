@@ -3,7 +3,7 @@ import { compile } from "gtlua/compiler/index.js";
 // Monaco is heavy (~2.8MB); lazy-load the editor so the app shell + emulator
 // paint immediately and Monaco streams in behind a Suspense fallback.
 const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m.Editor })));
-import { buildGtr } from "./build/build-client.js";
+import { buildGtr, prewarm } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
 import { WebSerialFlasher, webSerialAvailable } from "./flash/web-serial-flasher.js";
@@ -71,6 +71,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    prewarm();   // compile the build tools + fetch the toolchain now, before Play
     (async () => {
       const list = await refreshProjects();
       if (list.length) {

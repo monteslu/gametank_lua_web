@@ -152,8 +152,19 @@ async function buildCart(source, opts = {}) {
   return { ok: true, gtr, ms: Math.round(performance.now() - t0) };
 }
 
+// Kick warmup off the moment the worker exists (page load), so the tools are
+// compiled + the share/SDK trees fetched BEFORE the first Play - the first build
+// then pays no lazy-init cost. The promise is awaited by buildCart's warmup()
+// call too, so a Play that beats warmup just waits on the same in-flight promise.
+const warmPromise = warmup().catch((err) => { self.__warmErr = err; });
+
 self.onmessage = async (e) => {
   const { type, id, source, opts } = e.data;
+  if (type === "warm") {
+    try { await warmPromise; postMessage({ type: "warm-done", id }); }
+    catch (err) { postMessage({ type: "warm-done", id, error: String(err) }); }
+    return;
+  }
   if (type !== "build") return;
   try {
     const result = await buildCart(source, { ...opts, __id: id });
