@@ -16,6 +16,7 @@ import { listProjects, getProject, createProject, saveProject, deleteProject } f
 import { loadExampleFiles, loadExamplePlacement } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
 import { readManifest, writeManifest, ensureManifest, defaultManifest } from "./projects/manifest.js";
+import { p8ToProject, p8PngToProject } from "./import/p8-import.js";
 import { downloadBytes, pickFile } from "./util/download.js";
 import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
 import { newSheet, splitSheet, joinSheet, QUAD_FILES } from "./gfx/gtg.js";
@@ -521,8 +522,23 @@ export function App() {
   }, [currentId, source, projectName]);
 
   const importBundle = useCallback(async () => {
-    const picked = await pickFile(".gtlua,.zip");
+    const picked = await pickFile(".gtlua,.zip,.p8,.png");
     if (!picked) return;
+    // a PICO-8 cart (text .p8 or steganographic .p8.png): convert code + gfx +
+    // sfx/music into a new project. Invalid files fail with a clear message.
+    if (/\.p8$/i.test(picked.name) || /\.png$/i.test(picked.name)) {
+      try {
+        const name = picked.name.replace(/\.p8\.png$/i, "").replace(/\.(p8|png)$/i, "");
+        const { files: p8files } = /\.png$/i.test(picked.name)
+          ? await p8PngToProject(picked.bytes, name)
+          : p8ToProject(dec.decode(picked.bytes), name);
+        ensureManifest(p8files, name);
+        const rec = await createProject(name, p8files, Date.now());
+        await refreshProjects();
+        await openProject(rec.id);
+      } catch (e) { setBuildErr(`p8 import failed: ${e.message}`); }
+      return;
+    }
     let files;
     try { files = unzip(picked.bytes); } catch (e) { setBuildErr(`import failed: ${e.message}`); return; }
     // text-decode the text files (project.json + *.lua stored as bytes in the zip)
@@ -549,6 +565,7 @@ export function App() {
           {building ? "building..." : warm ? "▶ Play" : "warming up..."}
         </button>
         <button className="tb-btn" onClick={downloadGtr} disabled={!rom} title="download the built .gtr cart">.gtr</button>
+        <button className="tb-btn" onClick={importBundle} title="import a .gtlua bundle or a PICO-8 .p8 cart">import</button>
         <button className="tb-btn" onClick={exportBundle} disabled={!currentId} title="export project as .gtlua">export</button>
         {webSerialAvailable() && (
           <button className="tb-btn flash" onClick={flashToCart} disabled={!rom} title="flash the built cart to real GameTank hardware over USB">⚡ flash</button>
@@ -567,7 +584,6 @@ export function App() {
           onOpen={openProject}
           onNew={() => setShowNew(true)}
           onDelete={(id) => setConfirmDelete(projects.find((p) => p.id === id) ?? { id, name: "this project" })}
-          onImport={importBundle}
         />
         {confirmDelete && (
           <div className="flash-modal" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>

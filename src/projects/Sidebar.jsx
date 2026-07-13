@@ -5,15 +5,12 @@ import React from "react";
  * cloned from an example - start from the New Project dialog (the + button).
  * Purely presentational - all mutations go through the callbacks.
  */
-export function Sidebar({ projects, currentId, onOpen, onNew, onDelete, onImport }) {
+export function Sidebar({ projects, currentId, onOpen, onNew, onDelete }) {
   return (
     <aside className="sidebar">
       <div className="side-section">
         <div className="side-head">
           <span>projects</span>
-          <div className="side-actions">
-            <button title="import .gtlua" onClick={onImport}>⇪</button>
-          </div>
         </div>
         <button className="side-new" onClick={onNew}>+ New Project</button>
         <ul className="side-list">
