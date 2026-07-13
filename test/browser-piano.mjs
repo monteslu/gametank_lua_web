@@ -81,9 +81,50 @@ try {
 
   await page.keyboard.press("BracketRight");   // octave up -> base 5
   await page.waitForTimeout(100);
-  await page.keyboard.press("KeyZ");           // now C5
+  await page.keyboard.press("KeyZ");           // now C5 - and it PLACES at the cursor
   await page.waitForTimeout(100);
   check("] raises the octave (Z now plays C5)", (await noteReadout()) === "C5");
+
+  // --- cursor placement (tracker-style typing) ---
+  // reset octave to 4 for predictable notes
+  await page.keyboard.press("BracketLeft");
+  await page.waitForTimeout(80);
+  // click a cell to set the cursor, then type a run of notes; each should land
+  // and the cursor advance one row.
+  await page.locator(".mg-row").nth(2).locator(".mg-cell").nth(1).click();  // step 2, ch 1
+  await page.waitForTimeout(100);
+  const cursorAt = await page.evaluate(() => {
+    const c = document.querySelector(".mg-cell.cursor");
+    if (!c) return null;
+    const row = [...document.querySelectorAll(".mg-row")].indexOf(c.closest(".mg-row"));
+    const col = [...c.closest(".mg-row").querySelectorAll(".mg-cell")].indexOf(c);
+    return { row, col };
+  });
+  check("clicking a cell sets the cursor", cursorAt && cursorAt.row === 2 && cursorAt.col === 1);
+
+  // type C, E, G on the keyboard -> three notes down channel 1 from step 2
+  await page.keyboard.press("KeyZ");  // C4
+  await page.waitForTimeout(80);
+  await page.keyboard.press("KeyC");  // E4 (semitone 4)
+  await page.waitForTimeout(80);
+  await page.keyboard.press("KeyB");  // G4 (semitone 7)
+  await page.waitForTimeout(120);
+
+  const placed = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".mg-row")];
+    const cellText = (r, c) => rows[r]?.querySelectorAll(".mg-cell")[c]?.textContent;
+    return { s2: cellText(2, 1), s3: cellText(3, 1), s4: cellText(4, 1) };
+  });
+  console.log("     typed run:", JSON.stringify(placed));
+  check("typing places notes from the cursor down", placed.s2 === "C4" && placed.s3 === "E4" && placed.s4 === "G4");
+
+  // Delete clears the cell under the cursor (now at step 5) and the ones we set:
+  // move cursor back to step 2 and Delete
+  await page.locator(".mg-row").nth(2).locator(".mg-cell").nth(1).click();
+  await page.keyboard.press("Delete");
+  await page.waitForTimeout(100);
+  const afterDel = await page.evaluate(() => [...document.querySelectorAll(".mg-row")][2].querySelectorAll(".mg-cell")[1].textContent);
+  check("Delete clears the cell under the cursor", afterDel === "·");
 
   await browser.close();
 } catch (e) {

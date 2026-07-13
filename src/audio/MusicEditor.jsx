@@ -41,6 +41,7 @@ export function MusicEditor({ song, onChange }) {
   const [playRow, setPlayRow] = useState(-1);
   const [pitch, setPitch] = useState(noteNum("c4"));
   const [baseOctave, setBaseOctave] = useState(4);   // Z row = this octave's C
+  const [cursor, setCursor] = useState({ step: 0, ch: 0 });   // edit cursor
   const rootRef = useRef(null);
   const heldKeys = useRef(new Set());
 
@@ -49,6 +50,11 @@ export function MusicEditor({ song, onChange }) {
     preview.current.onFrame = () => {};
     return () => preview.current?.dispose();
   }, []);
+
+  // keep the cursor inside the grid when steps shrink
+  useEffect(() => {
+    setCursor((c) => (c.step < model.steps ? c : { ...c, step: model.steps - 1 }));
+  }, [model.steps]);
 
   const setGrid = (step, ch, note) => {
     const grid = model.grid.map((row) => row.slice());
@@ -61,10 +67,10 @@ export function MusicEditor({ song, onChange }) {
     if (!playing) preview.current?.playNote(model.instruments[0] ?? 0, midi);
   }, [playing, model.instruments]);
 
-  // Computer-keyboard note playing: Z/Q rows play notes (set the current pitch +
-  // preview), Z/X (octave down/up)... actually X is a note, so use the bracket
-  // keys and the number-pad-free [ ] for octave. Only active when the music
-  // editor is focused/hovered and you're not typing in a field.
+  // Computer-keyboard editing, tracker-style: note keys (Z/Q rows) PLACE the note
+  // at the edit cursor and advance a row (like Renoise/FL); arrows move the
+  // cursor; Delete/Backspace clears; [ ] shift the octave. Only active while the
+  // music editor is mounted and you're not typing in a field.
   useEffect(() => {
     const editing = () => {
       const el = document.activeElement;
@@ -72,21 +78,44 @@ export function MusicEditor({ song, onChange }) {
     };
     const onDown = (e) => {
       if (editing() || e.ctrlKey || e.metaKey || e.altKey) return;
+      const steps = model.steps;
+
+      // octave shift
       if (e.code === "BracketLeft") { setBaseOctave((o) => Math.max(1, o - 1)); e.preventDefault(); return; }
       if (e.code === "BracketRight") { setBaseOctave((o) => Math.min(7, o + 1)); e.preventDefault(); return; }
+
+      // cursor movement
+      if (e.code === "ArrowUp") { setCursor((c) => ({ ...c, step: (c.step - 1 + steps) % steps })); e.preventDefault(); return; }
+      if (e.code === "ArrowDown") { setCursor((c) => ({ ...c, step: (c.step + 1) % steps })); e.preventDefault(); return; }
+      if (e.code === "ArrowLeft") { setCursor((c) => ({ ...c, ch: (c.ch - 1 + CHANNELS) % CHANNELS })); e.preventDefault(); return; }
+      if (e.code === "ArrowRight") { setCursor((c) => ({ ...c, ch: (c.ch + 1) % CHANNELS })); e.preventDefault(); return; }
+
+      // clear the cell under the cursor + advance
+      if (e.code === "Delete" || e.code === "Backspace") {
+        setGrid(cursor.step, cursor.ch, 0);
+        setCursor((c) => ({ ...c, step: (c.step + 1) % steps }));
+        e.preventDefault(); return;
+      }
+
+      // a note key: place it at the cursor, preview it, advance a row
       const semi = KEY_SEMITONE[e.code];
       if (semi === undefined) return;
       if (heldKeys.current.has(e.code)) { e.preventDefault(); return; }   // ignore auto-repeat
       heldKeys.current.add(e.code);
       const midi = noteNum("c" + baseOctave) + semi;
-      if (midi >= 1 && midi <= 128) { setPitch(midi); previewNote(midi); }
+      if (midi >= 1 && midi <= 128) {
+        setPitch(midi);
+        setGrid(cursor.step, cursor.ch, midi);
+        previewNote(midi);
+        setCursor((c) => ({ ...c, step: (c.step + 1) % steps }));
+      }
       e.preventDefault();
     };
     const onUp = (e) => { heldKeys.current.delete(e.code); };
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
     return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); heldKeys.current.clear(); };
-  }, [baseOctave, previewNote]);
+  }, [baseOctave, previewNote, cursor, model.steps, model.grid, model.instruments]);
   const setInstrument = (ch, index) => {
     const instruments = model.instruments.slice();
     instruments[ch] = index;
@@ -225,10 +254,10 @@ export function MusicEditor({ song, onChange }) {
             {row.map((note, ch) => (
               <button
                 key={ch}
-                className={"mg-cell " + (note ? "on" : "")}
+                className={"mg-cell " + (note ? "on" : "") + (cursor.step === s && cursor.ch === ch ? " cursor" : "")}
                 style={note ? { background: CH_COLORS[ch], color: "#1a1726" } : undefined}
-                onClick={() => setGrid(s, ch, note ? 0 : pitch)}
-                onContextMenu={(e) => { e.preventDefault(); setGrid(s, ch, 0); }}
+                onClick={() => { setCursor({ step: s, ch }); setGrid(s, ch, note ? 0 : pitch); }}
+                onContextMenu={(e) => { e.preventDefault(); setCursor({ step: s, ch }); setGrid(s, ch, 0); }}
                 title={note ? nameOf(note) + " (click to clear)" : "click to place " + nameOf(pitch)}
               >
                 {note ? nameOf(note) : "·"}
@@ -237,7 +266,7 @@ export function MusicEditor({ song, onChange }) {
           </div>
         ))}
       </div>
-      <div className="music-hint">click a cell to place the selected note · click again (or right-click) to clear · 4 channels, each with its own FM instrument</div>
+      <div className="music-hint">click a cell to move the cursor + place · type notes on the keyboard (Z/Q rows) to fill from the cursor down · arrows move · Del clears · 4 channels, each its own FM instrument</div>
     </div>
   );
 }

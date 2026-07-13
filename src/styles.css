@@ -337,6 +337,7 @@ body {
 }
 .mg-cell:hover { border-color: var(--grape); }
 .mg-cell.on { border-color: transparent; }
+.mg-cell.cursor { outline: 2px solid var(--sun); outline-offset: -2px; z-index: 1; }
 .music-hint { padding: 8px 12px 14px; color: var(--dim); font: 11px var(--mono); }
 
 /* emulator */
