@@ -11,6 +11,7 @@ import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
 import { WebSerialFlasher, webSerialAvailable } from "./flash/web-serial-flasher.js";
 import { Sidebar } from "./projects/Sidebar.jsx";
+import { NewProjectModal, BLANK_SOURCE } from "./projects/NewProjectModal.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
 import { loadExampleFiles, loadExamplePlacement } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
@@ -359,12 +360,14 @@ export function App() {
   }, [music, songs, songIdx]);
 
   // --- project ops ---------------------------------------------------------
+  const [showNew, setShowNew] = useState(false);
   const newProject = useCallback(async () => {
-    const files = { "main.lua": "function _draw()\n  cls(0)\nend\n" };
+    const files = { "main.lua": BLANK_SOURCE };
     files["project.json"] = writeManifest(defaultManifest("untitled"));
     const rec = await createProject("untitled", files, Date.now());
     await refreshProjects();
     await openProject(rec.id);
+    setShowNew(false);
   }, [refreshProjects, openProject]);
 
   const forkExample = useCallback(async (ex) => {
@@ -387,6 +390,7 @@ export function App() {
     if (placement) seedReplay(String(rec.id), placement);
     await refreshProjects();
     await openProject(rec.id);
+    setShowNew(false);
   }, [refreshProjects, openProject]);
 
   const removeProject = useCallback(async (id) => {
@@ -561,11 +565,17 @@ export function App() {
           projects={projects}
           currentId={currentId}
           onOpen={openProject}
-          onNew={newProject}
-          onFork={forkExample}
+          onNew={() => setShowNew(true)}
           onDelete={removeProject}
           onImport={importBundle}
         />
+        {showNew && (
+          <NewProjectModal
+            onClone={forkExample}
+            onBlank={newProject}
+            onClose={() => setShowNew(false)}
+          />
+        )}
 
         <main className="panes">
           <section className="pane editor-pane">

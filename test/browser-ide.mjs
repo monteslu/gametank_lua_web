@@ -26,19 +26,21 @@ try {
 
   // sidebar + seeded project
   await page.waitForSelector(".sidebar", { timeout: 15000 });
-  await page.waitForFunction(() => document.querySelectorAll(".side-list .side-item:not(.example)").length >= 1, { timeout: 8000 });
-  const projCount = await page.evaluate(() => document.querySelectorAll(".side-item:not(.example)").length);
+  await page.waitForFunction(() => document.querySelectorAll(".side-list .side-item").length >= 1, { timeout: 8000 });
+  const projCount = await page.evaluate(() => document.querySelectorAll(".side-item").length);
   check("a project is seeded", projCount >= 1);
 
-  // examples loaded
-  await page.waitForFunction(() => document.querySelectorAll(".side-item.example").length >= 3, { timeout: 8000 });
-  const exNames = await page.evaluate(() => [...document.querySelectorAll(".side-item.example")].map((b) => b.textContent.split(/\s{2,}|\n/)[0].trim()));
-  check("examples listed (hello/orbit/...)", exNames.length >= 3);
-  console.log("     examples:", exNames.join(", "));
+  // examples gallery: the New Project dialog lists Blank + the examples
+  await page.click(".side-new");
+  await page.waitForFunction(() => document.querySelectorAll(".newproj-card").length >= 4, { timeout: 8000 });
+  const exNames = await page.evaluate(() => [...document.querySelectorAll(".newproj-card .newproj-name")].map((el) => el.textContent.trim()));
+  check("examples listed in the New Project dialog", exNames.length >= 4 && exNames[0] === "Blank Project");
+  console.log("     gallery:", exNames.join(", "));
+  const thumbs = await page.evaluate(() => [...document.querySelectorAll(".newproj-card img.newproj-thumb")].filter((i) => i.naturalWidth === 128).length);
+  check("example thumbnails load at 128px", thumbs >= 3);
 
-  // fork the orbit example -> it opens as a new project with its source
-  const orbitBtn = page.locator(".side-item.example", { hasText: "orbit" });
-  await orbitBtn.click();
+  // clone the orbit example -> it opens as a new project with its source
+  await page.locator(".newproj-card", { hasText: "orbit" }).locator("button.newproj-clone").click();
   await page.waitForFunction(() => document.querySelector(".proj-name")?.value === "orbit", { timeout: 5000 });
   const editorHasOrbit = await page.evaluate(() => { const s = window.__gtlua_test.getSource() || ""; return s.includes("_update") || s.length > 200; });
   check("forking orbit opened it", editorHasOrbit);

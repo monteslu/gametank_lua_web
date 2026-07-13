@@ -23,7 +23,8 @@ export async function launch(game) {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".sidebar");
   await page.waitForTimeout(1000);
-  await page.locator(".side-item.example", { hasText: game }).first().click();
+  await page.click(".side-new");
+  await page.locator(".newproj-card", { hasText: game }).locator("button.newproj-clone").click();
   await page.waitForTimeout(500);
   await page.click("button.play");
   await page.waitForFunction(() => document.querySelector(".emu-canvas")?.width === 128 && !document.querySelector(".emu-overlay"), { timeout: 120000 });

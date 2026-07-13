@@ -580,3 +580,59 @@ body {
 .emu-controls .emu-btn:hover:not(:disabled) { border-color: var(--accent-2); color: #fff; }
 .emu-controls .emu-btn:disabled { opacity: 0.4; cursor: default; }
 .emu-hint { font: 11px var(--mono); color: var(--dim); margin-left: 4px; }
+
+/* New Project dialog: Blank + cloneable examples with 128x128 thumbnails */
+.side-new {
+  display: block; width: calc(100% - 16px); margin: 2px 8px 8px;
+  padding: 7px 10px; font: 700 12px system-ui, sans-serif; color: #1a1726;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: 0; border-radius: 9px; cursor: pointer;
+}
+.side-new:hover { filter: brightness(1.1); }
+.newproj-box {
+  width: 720px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden;
+}
+.newproj-head {
+  display: flex; align-items: baseline; gap: 10px; padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.newproj-title { font: 800 16px system-ui, sans-serif; color: var(--accent); }
+.newproj-sub { font: 12px system-ui, sans-serif; color: var(--dim); }
+.newproj-close {
+  margin-left: auto; width: 26px; height: 26px; line-height: 1; padding: 0;
+  color: var(--fg); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; cursor: pointer; font-size: 15px;
+}
+.newproj-close:hover { border-color: var(--accent-2); color: #fff; }
+.newproj-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px; padding: 14px 20px 20px; overflow-y: auto;
+}
+.newproj-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px; background: #12151c; border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.newproj-card:hover { border-color: var(--accent-2); }
+.newproj-thumb {
+  width: 128px; height: 128px; border-radius: 8px;
+  image-rendering: pixelated; background: #0a0c10;
+}
+.newproj-thumb.blank {
+  display: flex; align-items: center; justify-content: center;
+  font: 300 56px system-ui, sans-serif; color: var(--grape);
+  border: 1px dashed var(--line);
+}
+.newproj-name { font: 700 13px system-ui, sans-serif; color: var(--fg); }
+.newproj-blurb {
+  font: 11px/1.4 system-ui, sans-serif; color: var(--dim); text-align: center;
+  min-height: 30px;
+}
+.newproj-clone {
+  width: 100%; padding: 6px 0; font: 700 12px system-ui, sans-serif; color: #1a1726;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: 0; border-radius: 8px; cursor: pointer;
+}
+.newproj-clone:hover { filter: brightness(1.1); }

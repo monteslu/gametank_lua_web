@@ -155,6 +155,12 @@ for (const ex of EX_LIST) {
     await cp(path.join(dir, "build", ".placement.json"), path.join(EX_OUT, ex.name, "placement.json"));
   }
   const entry = { name: ex.name, blurb: ex.blurb, files };
+  // 128x128 gallery thumbnail (an emulator screenshot of the example running),
+  // kept in this repo under examples-thumbs/ so it needs no package republish
+  if (existsSync(path.join(HERE, "examples-thumbs", `${ex.name}.png`))) {
+    await cp(path.join(HERE, "examples-thumbs", `${ex.name}.png`), path.join(EX_OUT, ex.name, "thumb.png"));
+    entry.thumb = true;
+  }
   if (ex.num8) entry.num8 = true;
   if (ex.license) entry.license = ex.license;
   examples.push(entry);

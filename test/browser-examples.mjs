@@ -28,7 +28,8 @@ try {
   await page.waitForTimeout(800);
 
   for (const g of GENRES) {
-    await page.locator(".side-item.example", { hasText: g }).first().click();
+    await page.click(".side-new");
+    await page.locator(".newproj-card", { hasText: g }).locator("button.newproj-clone").click();
     await page.waitForTimeout(300);
     const src = await page.evaluate(() => window.__gtlua_test.getSource());
     const r = await page.evaluate((s) => window.__gtlua_test.build(s).then((b) => ({ ok: b.ok, len: b.gtr ? b.gtr.byteLength : 0 })).catch((e) => ({ ok: false, err: e.message })), src);
@@ -39,7 +40,8 @@ try {
   }
 
   // run one (shmup) and confirm it renders a scene (not black)
-  await page.locator(".side-item.example", { hasText: "shmup" }).first().click();
+  await page.click(".side-new");
+  await page.locator(".newproj-card", { hasText: "shmup" }).locator("button.newproj-clone").click();
   await page.waitForTimeout(300);
   await page.click("button.play");
   await page.waitForFunction(() => document.querySelector(".emu-canvas")?.width === 128 && !document.querySelector(".emu-overlay"), { timeout: 120000 });
