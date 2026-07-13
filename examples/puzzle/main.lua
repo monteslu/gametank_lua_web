@@ -31,6 +31,10 @@ local score = 0
 local state = 0        -- 0 title, 1 playing, 2 game over
 local flash = 0
 
+-- score readout: gt-lua has no runtime string building, so bake the digits into
+-- a byte buffer (ASCII chars) and blit it with gt.print_buf. "SCORE 000000\0".
+local sbuf = array8(16)
+
 local col_bg, col_well, col_frame, col_hud
 
 function _init()
@@ -46,6 +50,25 @@ function roll_next()
   n0 = 1 + flr(rnd(6))
   n1 = 1 + flr(rnd(6))
   n2 = 1 + flr(rnd(6))
+end
+
+-- write " SCORE nnnnnn\0" into sbuf as ASCII bytes for gt.print_buf. The buffer
+-- print path drops the FIRST char, so byte 0 is a throwaway space.
+function bake_score()
+  sbuf[0] = 32   -- (dropped) leading space
+  sbuf[1] = 83   -- S
+  sbuf[2] = 67   -- C
+  sbuf[3] = 79   -- O
+  sbuf[4] = 82   -- R
+  sbuf[5] = 69   -- E
+  sbuf[6] = 32   -- space
+  -- 6 digits, right-aligned (leading zeros)
+  local v = score
+  for i = 5, 0, -1 do
+    sbuf[7 + i] = 48 + (v % 10)   -- '0' + digit
+    v = flr(v / 10)
+  end
+  sbuf[13] = 0    -- terminator
 end
 
 function blocked(r, c)
@@ -260,9 +283,9 @@ function _draw()
   spr(n1 - 1, 104, 34)
   spr(n2 - 1, 104, 42)
 
-  -- score bar across the top-left
-  rect(2, 3, 27, 7, col_hud)
-  if (score > 0) rectfill(3, 4, 3 + flr(score / 40), 6, gt.rgb(0, 228, 54))
+  -- numeric SCORE readout, top-left (x>=6 so the first glyph isn't clipped)
+  bake_score()
+  gt.print_buf(sbuf, 0, 6, 3, col_hud)
 
   if state == 2 then
     if flash % 20 < 12 then
