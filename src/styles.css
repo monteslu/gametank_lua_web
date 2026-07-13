@@ -628,11 +628,20 @@ body {
 .newproj-name { font: 700 13px system-ui, sans-serif; color: var(--fg); }
 .newproj-blurb {
   font: 11px/1.4 system-ui, sans-serif; color: var(--dim); text-align: center;
-  min-height: 30px;
+  flex: 1;   /* soak up the height difference so every Clone button lines up */
 }
 .newproj-clone {
+  margin-top: auto;
   width: 100%; padding: 6px 0; font: 700 12px system-ui, sans-serif; color: #1a1726;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   border: 0; border-radius: 8px; cursor: pointer;
 }
 .newproj-clone:hover { filter: brightness(1.1); }
+
+/* blank editor area until a project is picked */
+.no-project {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; color: var(--dim);
+  font: 13px system-ui, sans-serif;
+}
+.no-project .side-new { width: auto; padding: 8px 22px; }

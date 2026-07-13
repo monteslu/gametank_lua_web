@@ -26,9 +26,18 @@ try {
 
   // sidebar + seeded project
   await page.waitForSelector(".sidebar", { timeout: 15000 });
-  await page.waitForFunction(() => document.querySelectorAll(".side-list .side-item").length >= 1, { timeout: 8000 });
-  const projCount = await page.evaluate(() => document.querySelectorAll(".side-item").length);
-  check("a project is seeded", projCount >= 1);
+  // first run: nothing is forced on you - no auto-created project, the editor
+  // area is blank, and the New Project dialog opens itself
+  await page.waitForSelector(".newproj-box", { timeout: 8000 });
+  const firstRun = await page.evaluate(() => ({
+    projects: document.querySelectorAll(".side-list .side-item").length,
+    playDisabled: document.querySelector("button.play")?.disabled,
+  }));
+  check("first run: no forced project, dialog open", firstRun.projects === 0);
+  await page.click(".newproj-close");
+  await page.waitForTimeout(200);
+  const blank = await page.evaluate(() => !!document.querySelector(".no-project"));
+  check("blank editor state until a project is picked", blank);
 
   // examples gallery: the New Project dialog lists Blank + the examples
   await page.click(".side-new");

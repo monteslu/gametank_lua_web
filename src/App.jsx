@@ -25,18 +25,6 @@ import { MusicEditor, newSong, songToBytes } from "./audio/MusicEditor.jsx";
 import { toHex } from "./audio/gtm2.js";
 import { parseSongbook, serializeSongbook, defaultSongName, songVarName } from "./audio/songbook.js";
 
-const HELLO = `-- hello: a complete GameTank game. No assets, just code.
-function _draw()
-  cls(1)                          -- dark blue background
-  print("hello gametank", 38, 14, 14)   -- pink title
-
-  circfill(64, 72, 26, 10)        -- yellow head
-  rectfill(53, 62, 58, 68, 0)     -- left eye
-  rectfill(70, 62, 75, 68, 0)     -- right eye
-  circfill(64, 82, 9, 0)          -- mouth
-end
-`;
-
 const dec = new TextDecoder();
 const asText = (v) => (typeof v === "string" ? v : dec.decode(v));
 
@@ -49,8 +37,8 @@ const asText = (v) => (typeof v === "string" ? v : dec.decode(v));
 export function App() {
   const [projects, setProjects] = useState([]);
   const [currentId, setCurrentId] = useState(null);
-  const [source, setSource] = useState(HELLO);
-  const [projectName, setProjectName] = useState("hello");
+  const [source, setSource] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [sheet, setSheet] = useState(null);      // Uint8Array(16384) or null (no gfx.gtg)
   const [frames, setFrames] = useState(null);    // array of {vxo,vyo,w,h,gx,gy} or null
   // Songs: a project can hold several .gtm2 songs (title/level/boss). `songs` is
@@ -94,10 +82,9 @@ export function App() {
       if (list.length) {
         await openProject(list[0].id);
       } else {
-        // first run: seed a "hello" project the user owns
-        const rec = await createProject("hello", { "main.lua": HELLO }, Date.now());
-        await refreshProjects();
-        setCurrentId(rec.id); setSource(HELLO); setProjectName(rec.name);
+        // first run: nothing is forced on you - the editor stays blank and
+        // the New Project dialog opens so you pick your starting point
+        setShowNew(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,12 +119,13 @@ export function App() {
 
   // --- live compile --------------------------------------------------------
   const result = useMemo(() => {
+    if (!currentId) return { ok: true, c: null, diagnostics: [] };
     try {
       return compile(source, "main.lua");
     } catch (e) {
       return { ok: false, c: null, diagnostics: [{ severity: "error", message: String(e?.message ?? e), line: 1, col: 1 }] };
     }
-  }, [source]);
+  }, [source, currentId]);
 
   const errors = result.diagnostics.filter((d) => d.severity === "error");
   const warnings = result.diagnostics.filter((d) => d.severity === "warning");
@@ -398,9 +386,15 @@ export function App() {
     const list = await refreshProjects();
     if (id === currentId) {
       if (list.length) await openProject(list[0].id);
-      else await newProject();
+      else {
+        // no projects left: back to the blank state + the picker
+        setCurrentId(null); setProjectName(""); setSource("");
+        setSheet(null); setFrames(null); setSongs(null); setSongIdx(0); setMusic(null);
+        setProject({}); setNum8(false); setRom(null); setView("code");
+        setShowNew(true);
+      }
     }
-  }, [currentId, refreshProjects, openProject, newProject]);
+  }, [currentId, refreshProjects, openProject]);
 
   const rename = useCallback(async (name) => {
     setProjectName(name);
@@ -414,7 +408,7 @@ export function App() {
 
   // --- build / play --------------------------------------------------------
   const play = useCallback(async () => {
-    if (errors.length || !warm) return;   // Ctrl-R lands here too; gate it like the button
+    if (errors.length || !warm || !currentId) return;   // Ctrl-R lands here too; gate it like the button
     const seq = ++buildSeq.current;
     setBuilding(true); setBuildErr(""); setBuildMsg("building...");
     try {
@@ -543,13 +537,13 @@ export function App() {
     <div className="ide">
       <header className="topbar">
         <span className="logo">gt-lua <span className="dim">web</span></span>
-        <input className="proj-name" value={projectName} onChange={(e) => rename(e.target.value)} title="project name" />
-        <button className="play" onClick={play} disabled={!warm || building || errors.length > 0}
+        <input className="proj-name" value={projectName} onChange={(e) => rename(e.target.value)} title="project name" placeholder="no project" disabled={!currentId} />
+        <button className="play" onClick={play} disabled={!warm || !currentId || building || errors.length > 0}
           title={warm ? "build & run (Ctrl-R)" : "warming up the build tools..."}>
           {building ? "building..." : warm ? "▶ Play" : "warming up..."}
         </button>
         <button className="tb-btn" onClick={downloadGtr} disabled={!rom} title="download the built .gtr cart">.gtr</button>
-        <button className="tb-btn" onClick={exportBundle} title="export project as .gtlua">export</button>
+        <button className="tb-btn" onClick={exportBundle} disabled={!currentId} title="export project as .gtlua">export</button>
         {webSerialAvailable() && (
           <button className="tb-btn flash" onClick={flashToCart} disabled={!rom} title="flash the built cart to real GameTank hardware over USB">⚡ flash</button>
         )}
@@ -579,6 +573,13 @@ export function App() {
 
         <main className="panes">
           <section className="pane editor-pane">
+            {!currentId && (
+              <div className="no-project">
+                <p>nothing open yet</p>
+                <button className="side-new" onClick={() => setShowNew(true)}>+ New Project</button>
+              </div>
+            )}
+            {currentId && (<>
             <div className="pane-tabs">
               <button className={"tab " + (view === "code" ? "sel" : "")} onClick={() => setView("code")}>main.lua</button>
               {sheet
@@ -644,6 +645,7 @@ export function App() {
             {view === "cheat" && (
               <Suspense fallback={<div className="cheat-empty">loading…</div>}><Cheatsheet /></Suspense>
             )}
+            </>)}
           </section>
 
           <section className="pane emu-pane">
