@@ -15,6 +15,7 @@ const TOOLS = [
   { id: "line", icon: "ti-line", tip: "Line" },
   { id: "rect", icon: "ti-rectangle", tip: "Rectangle (outline)" },
   { id: "dropper", icon: "ti-color-picker", tip: "Eyedropper (pick a color from the sheet)" },
+  { id: "select", icon: "ti-marquee-2", tip: "Select (drag a box; Ctrl+C copy, Ctrl+X cut, Ctrl+V paste, Del clears)" },
 ];
 
 // Paint the sheet into an ImageData (transparent byte 0 -> checkerboard so it
@@ -95,6 +96,14 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const [hover, setHover] = useState(null);      // { x, y, cell, quad } cursor readout
   const drawing = useRef(null);                  // { startX, startY, base } during a drag
 
+  // selection + clipboard: sel is the marquee (normalized inclusive bounds),
+  // clip is the copied pixels, pasting is the floating-ghost anchor while a
+  // paste rides the cursor (click stamps it, Escape cancels)
+  const [sel, setSel] = useState(null);          // { x0, y0, x1, y1 }
+  const [clip, setClip] = useState(null);        // { w, h, data: Uint8Array }
+  const [pasting, setPasting] = useState(null);  // { x, y } ghost top-left
+  const clipCanvas = useRef(null);               // pre-rendered clip for the ghost
+
   // undo/redo: snapshot the sheet BEFORE each stroke/action so undo steps by
   // whole edits (not per-pixel). Bounded stacks of Uint8Array snapshots.
   const undoStack = useRef([]);
@@ -128,11 +137,36 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     if (ctx) drawSheet(ctx, sheet);
   }, [sheet]);
 
-  // repaint the guide overlay when zoom / grid toggle change
+  // repaint the guide overlay when zoom / grid toggle / selection / ghost change
   useEffect(() => {
     const ctx = overlayRef.current?.getContext("2d");
-    if (ctx) drawGuides(ctx, zoom, showGrid);
-  }, [zoom, showGrid]);
+    if (!ctx) return;
+    drawGuides(ctx, zoom, showGrid);
+    if (pasting && clipCanvas.current) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 0.7;
+      ctx.drawImage(clipCanvas.current, pasting.x * zoom, pasting.y * zoom,
+        clipCanvas.current.width * zoom, clipCanvas.current.height * zoom);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "rgba(120,255,160,0.9)";
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(pasting.x * zoom + 0.5, pasting.y * zoom + 0.5,
+        clipCanvas.current.width * zoom, clipCanvas.current.height * zoom);
+      ctx.restore();
+    } else if (sel) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sel.x0 * zoom + 0.5, sel.y0 * zoom + 0.5,
+        (sel.x1 - sel.x0 + 1) * zoom, (sel.y1 - sel.y0 + 1) * zoom);
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineDashOffset = 4;
+      ctx.strokeRect(sel.x0 * zoom + 0.5, sel.y0 * zoom + 0.5,
+        (sel.x1 - sel.x0 + 1) * zoom, (sel.y1 - sel.y0 + 1) * zoom);
+      ctx.restore();
+    }
+  }, [zoom, showGrid, sel, pasting]);
 
   const pixelAt = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -178,6 +212,70 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
 
   const commit = (buf) => onChange(buf);
 
+  const normSel = (a, b) => ({
+    x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y),
+    x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y),
+  });
+  const copySel = useCallback(() => {
+    if (!sel) return;
+    const w = sel.x1 - sel.x0 + 1, h = sel.y1 - sel.y0 + 1;
+    const data = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        data[y * w + x] = getPixel(sheet, sel.x0 + x, sel.y0 + y);
+    setClip({ w, h, data });
+    // pre-render the ghost once (transparent bytes -> alpha 0) so the paste
+    // preview is one scaled drawImage per move, not a fillRect per pixel
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    const img = ctx.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      const o = i * 4;
+      if (data[i] === TRANSPARENT) { img.data[o + 3] = 0; continue; }
+      const [r, g, b] = byteToRgb(data[i]);
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    clipCanvas.current = c;
+  }, [sel, sheet]);
+  const clearSel = useCallback(() => {
+    if (!sel) return;
+    snapshot();
+    const buf = new Uint8Array(sheet);
+    for (let y = sel.y0; y <= sel.y1; y++)
+      for (let x = sel.x0; x <= sel.x1; x++)
+        setPixel(buf, x, y, TRANSPARENT);
+    commit(buf);
+  }, [sel, sheet, snapshot]);
+  const cutSel = useCallback(() => { copySel(); clearSel(); }, [copySel, clearSel]);
+  const pasteBegin = useCallback(() => {
+    if (!clip) return;
+    setTool("select");
+    setSel(null);
+    // anchor the ghost centered on the last hover (or the sheet center)
+    const cx = (hover?.x ?? SHEET_DIM / 2) - (clip.w >> 1);
+    const cy = (hover?.y ?? SHEET_DIM / 2) - (clip.h >> 1);
+    setPasting({ x: cx, y: cy });
+  }, [clip, hover]);
+  const stampPaste = useCallback((at) => {
+    if (!clip || !at) return;
+    snapshot();
+    const buf = new Uint8Array(sheet);
+    for (let y = 0; y < clip.h; y++) {
+      const sy = at.y + y;
+      if (sy < 0 || sy >= SHEET_DIM) continue;
+      for (let x = 0; x < clip.w; x++) {
+        const sx = at.x + x;
+        if (sx < 0 || sx >= SHEET_DIM) continue;
+        const byte = clip.data[y * clip.w + x];
+        if (byte !== TRANSPARENT) setPixel(buf, sx, sy, byte);   // paste keeps holes
+      }
+    }
+    commit(buf);
+    setPasting(null);
+  }, [clip, sheet, snapshot]);
+
   const onDown = (e) => {
     const p = pixelAt(e);
     if (!p) return;
@@ -185,6 +283,16 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     // eyedropper: pick the color under the cursor, don't paint (no undo entry)
     if (tool === "dropper") {
       setColor(getPixel(sheet, p.x, p.y));
+      return;
+    }
+    // floating paste: click stamps the clip where the ghost sits
+    if (pasting) {
+      stampPaste(pasting);
+      return;
+    }
+    if (tool === "select") {
+      drawing.current = { tool: "select", start: p };
+      setSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
       return;
     }
     snapshot();   // remember the pre-edit sheet for undo (one entry per stroke)
@@ -206,9 +314,17 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const onMove = (e) => {
     const p = pixelAt(e);
     if (p) setHover({ x: p.x, y: p.y, cell: cellAt(p.x, p.y), quad: quadAt(p.x, p.y) });
+    if (pasting && p && clip) {
+      setPasting({ x: p.x - (clip.w >> 1), y: p.y - (clip.h >> 1) });
+      return;
+    }
     const d = drawing.current;
     if (!d) return;
     if (!p) return;
+    if (d.tool === "select") {
+      setSel(normSel(d.start, p));
+      return;
+    }
     if (d.tool === "pencil" || d.tool === "eraser") {
       const buf = new Uint8Array(sheet);
       drawLine(buf, d.last.x, d.last.y, p.x, p.y, d.paint);
@@ -238,15 +354,22 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   useEffect(() => {
     const onKey = (e) => {
       if (!rootRef.current || !rootRef.current.contains(document.activeElement) && !rootRef.current.matches(":hover")) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
       const k = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) {
+        if (e.key === "Escape") { setPasting(null); setSel(null); return; }
+        if ((e.key === "Delete" || e.key === "Backspace") && sel) { e.preventDefault(); clearSel(); return; }
+        return;
+      }
       if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
       else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+      else if (k === "c" && sel) { e.preventDefault(); copySel(); }
+      else if (k === "x" && sel) { e.preventDefault(); cutSel(); }
+      else if (k === "v" && clip) { e.preventDefault(); pasteBegin(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, sel, clip, copySel, cutSel, pasteBegin, clearSel]);
 
   const [importMsg, setImportMsg] = useState("");
   const flash = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 4000); };
@@ -321,6 +444,13 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
           data-tip="Undo (Ctrl+Z)"
           aria-label="undo"
         ><i className="ti ti-arrow-back-up" /></button>
+        <span className="tb-gap" />
+        <button className="tool icon tip" onClick={copySel} disabled={!sel}
+          data-tip="Copy selection (Ctrl+C)" aria-label="copy"><i className="ti ti-copy" /></button>
+        <button className="tool icon tip" onClick={cutSel} disabled={!sel}
+          data-tip="Cut selection (Ctrl+X)" aria-label="cut"><i className="ti ti-scissors" /></button>
+        <button className="tool icon tip" onClick={pasteBegin} disabled={!clip}
+          data-tip="Paste (Ctrl+V) - the copy rides the cursor; click to stamp, Esc cancels" aria-label="paste"><i className="ti ti-clipboard" /></button>
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
         <button className="tool icon import tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
