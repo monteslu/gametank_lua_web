@@ -384,6 +384,7 @@ body {
 .m-field { display: flex; align-items: center; gap: 6px; font: 12px system-ui, sans-serif; color: var(--dim); }
 .m-field input, .m-field select { background: #12151c; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: 12px var(--mono); }
 .m-field input { width: 56px; }
+.m-rate { font: 11px var(--mono); color: var(--grape); white-space: nowrap; }
 
 /* channel headers stay pinned above the scrolling rows. A stable scrollbar
    gutter on BOTH keeps the same content width so the columns stay aligned once

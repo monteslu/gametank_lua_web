@@ -255,8 +255,10 @@ export function MusicEditor({ song, onChange }) {
         <button className={"m-play " + (playing ? "on" : "")} onClick={playing ? stop : play}>
           {playing ? "❚❚ stop" : "▶ preview"}
         </button>
-        <label className="m-field">tempo (frames/step)
+        <label className="m-field" title="how long each step lasts, in 60 Hz frames (the .gtm2 unit). Fewer frames = faster; more frames = slower.">
+          step length (frames)
           <input type="number" min="2" max="60" value={model.delay} onChange={(e) => setDelay(+e.target.value)} />
+          <span className="m-rate">≈ {(60 / model.delay).toFixed(1)} steps/s</span>
         </label>
         <label className="m-field">steps
           <input type="number" min="4" max={MAX_STEPS} value={model.steps} onChange={(e) => setSteps(+e.target.value)} />
