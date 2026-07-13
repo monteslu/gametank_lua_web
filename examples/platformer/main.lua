@@ -2,7 +2,9 @@
 --   d-pad L/R  move        A (Z)  jump
 -- Reach the gold flag on the right to advance; touch a red spike or fall off the
 -- bottom and you respawn. Gravity, ground/platform collision, coyote-ish jump.
--- SFX on jump / land / win. gt-lua: fixed-point positions, boolean conditions.
+-- SFX on jump / land / win, plus background music. The hero is an 8x8 sprite
+-- (cell 0 faces right, cell 1 faces left). gt-lua: integer positions, boolean
+-- conditions.
 
 -- player (integers for pixel-perfect platforming)
 local px = 8
@@ -22,13 +24,13 @@ local plw = array8(6)
 -- spikes: x positions on the ground
 local spx = array8(3)
 
-local col_sky, col_ground, col_plat, col_player, col_spike, col_flag
+local col_sky, col_ground, col_plat, col_spike, col_flag
 
 function _init()
+  music(0)
   col_sky    = gt.rgb(41, 173, 255)
   col_ground = gt.rgb(94, 62, 20)
   col_plat   = gt.rgb(0, 228, 54)
-  col_player = gt.rgb(255, 236, 39)
   col_spike  = gt.rgb(255, 0, 77)
   col_flag   = gt.rgb(255, 163, 0)
 
@@ -147,10 +149,8 @@ function _draw()
   rectfill(122, 88, 123, 104, 7)
   rectfill(116, 88, 122, 94, col_flag)
 
-  -- player
-  rectfill(px, py, px + 5, py + 7, col_player)
-  -- a little face pixel showing facing
-  if face > 0 then pset(px + 4, py + 2, 0) else pset(px + 1, py + 2, 0) end
+  -- player: 8x8 sprite, cell 0 faces right / cell 1 faces left
+  if face > 0 then spr(0, px, py) else spr(1, px, py) end
 
   if won > 0 then print("nice!", 48, 40, 7) end
 end
