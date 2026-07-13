@@ -323,7 +323,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
         ><i className="ti ti-arrow-back-up" /></button>
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
-        <button className="tool icon tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
+        <button className="tool icon import tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
         <label className="quad-sel" title="which 128x128 quadrant .gtg import/export targets (gfx.gtg / gfx_1 / _2 / _3)">
           <select value={quad} onChange={(e) => setQuad(+e.target.value)}>
             {QUAD_NAME.map((n, i) => <option key={i} value={i}>{["gfx.gtg", "gfx_1", "gfx_2", "gfx_3"][i]} · {n}</option>)}

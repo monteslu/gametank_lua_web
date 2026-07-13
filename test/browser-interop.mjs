@@ -53,8 +53,10 @@ try {
   // the import/export buttons exist in each editor
   await page.click(".tab.add >> text=+ sprites");
   await page.waitForSelector(".sprite-canvas");
-  const spriteBtns = await page.evaluate(() => [...document.querySelectorAll(".sprite-toolbar .tool")].map((b) => b.textContent).join("|"));
-  check("sprite editor has .gtg import/export", /\.gtg ▾/.test(spriteBtns) && /\.gtg ▴/.test(spriteBtns));
+  // the .gtg import/export are now icon buttons (aria-labelled)
+  const gtgIn = await page.locator('.sprite-toolbar .tool[aria-label="import .gtg"]').count();
+  const gtgOut = await page.locator('.sprite-toolbar .tool[aria-label="export .gtg"]').count();
+  check("sprite editor has .gtg import/export", gtgIn === 1 && gtgOut === 1);
 
   await page.click(".tab.add >> text=+ frames");
   await page.waitForSelector(".frame-overlay");
