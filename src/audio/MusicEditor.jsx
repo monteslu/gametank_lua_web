@@ -176,13 +176,26 @@ export function MusicEditor({ song, onChange }) {
     }
   }, [model.instruments, onChange]);
 
-  // raw .gtm2 import/export - the exact song file a C-SDK build embeds.
-  const flashMsg = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 5000); };
+  // raw .gtm2 import/export - the exact song file the gt-lua / modern C SDK
+  // embeds. NOTE: the OLDER C SDK's `.gtm` (produced by the legacy midiconvert)
+  // is a DIFFERENT format - it parses without erroring but yields nonsense (out
+  // of range instruments), so we detect that and reject it clearly instead of
+  // importing garbage. Convert an old .gtm from its source MIDI instead.
+  const flashMsg = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 6000); };
   const importGtm2 = useCallback(async () => {
     const picked = await pickFile(".gtm2");
     if (!picked) return;
-    try { onChange(gtm2ToModel(picked.bytes)); flashMsg("imported .gtm2 song"); }
-    catch (e) { flashMsg("import failed: " + e.message); }
+    try {
+      const m = gtm2ToModel(picked.bytes);
+      // sanity: valid FM instrument indices are 0-9. A legacy .gtm mis-parses
+      // into out-of-range indices - reject rather than import a broken song.
+      if (!m.instruments || m.instruments.some((n) => n < 0 || n > 9)) {
+        flashMsg("this looks like a legacy .gtm (not .gtm2). Import its MIDI instead.");
+        return;
+      }
+      onChange(m);
+      flashMsg("imported .gtm2 song");
+    } catch (e) { flashMsg("import failed: " + e.message); }
   }, [onChange]);
   const exportGtm2 = useCallback(() => downloadBytes("song.gtm2", songToBytes(model), "application/octet-stream"), [model]);
 

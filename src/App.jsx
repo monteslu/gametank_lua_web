@@ -20,6 +20,7 @@ import { FrameEditor } from "./gfx/FrameEditor.jsx";
 import { parseGsi, encodeGsi } from "./gfx/gsi.js";
 import { MusicEditor, newSong, songToBytes } from "./audio/MusicEditor.jsx";
 import { toHex } from "./audio/gtm2.js";
+import { parseSongbook, serializeSongbook, defaultSongName, songVarName } from "./audio/songbook.js";
 
 const HELLO = `-- hello: a complete GameTank game. No assets, just code.
 function _draw()
@@ -49,7 +50,12 @@ export function App() {
   const [projectName, setProjectName] = useState("hello");
   const [sheet, setSheet] = useState(null);      // Uint8Array(16384) or null (no gfx.gtg)
   const [frames, setFrames] = useState(null);    // array of {vxo,vyo,w,h,gx,gy} or null
-  const [music, setMusic] = useState(null);      // tracker grid model or null (music.json)
+  // Songs: a project can hold several .gtm2 songs (title/level/boss). `songs` is
+  // the songbook [{name, model}]; `songIdx` is the active one; `music` mirrors
+  // the active song's MODEL so the editor/build/copy paths stay single-song.
+  const [songs, setSongs] = useState(null);      // [{name, model}] or null (no music)
+  const [songIdx, setSongIdx] = useState(0);
+  const [music, setMusic] = useState(null);      // active song model (songs[songIdx].model)
   const [view, setView] = useState("code");      // "code" | "sprite" | "frames" | "music"
 
   const [rom, setRom] = useState(null);
@@ -100,8 +106,10 @@ export function App() {
     setSheet(rec.files["gfx.gtg"] ? joinSheet(rec.files) : null);
     const gsi = rec.files["gfx.gsi"];
     setFrames(gsi ? parseGsi(gsi instanceof Uint8Array ? gsi : new Uint8Array(gsi)) : null);
-    const mus = rec.files["music.json"];
-    setMusic(mus ? JSON.parse(asText(mus)) : null);
+    const book = parseSongbook(rec.files["music.json"] ? asText(rec.files["music.json"]) : null);
+    setSongs(book ? book.songs : null);
+    setSongIdx(book ? book.current : 0);
+    setMusic(book ? book.songs[book.current].model : null);
     setView("code");
     setRom(null); setBuildMsg(""); setBuildErr("");
   }, []);
@@ -215,46 +223,109 @@ export function App() {
     refreshProjects();
   }, [currentId, refreshProjects]);
 
-  // music (tracker grid model persisted as music.json)
-  const onMusicChange = useCallback((m) => {
-    setMusic(m);
+  // music: a songbook [{name, model}] persisted as music.json (v2 envelope).
+  // Persist the whole book immediately (add/rename/delete are structural), or
+  // debounced for note edits.
+  const persistSongbook = useCallback(async (bookSongs, current, debounce) => {
     if (!currentId) return;
-    clearTimeout(musicSaveTimer.current);
-    musicSaveTimer.current = setTimeout(async () => {
+    const write = async () => {
       const rec = await getProject(currentId);
       if (!rec) return;
-      rec.files["music.json"] = JSON.stringify(m);
+      rec.files["music.json"] = serializeSongbook({ songs: bookSongs, current });
       await saveProject(rec, Date.now());
       refreshProjects();
-    }, 500);
+    };
+    if (debounce) {
+      clearTimeout(musicSaveTimer.current);
+      musicSaveTimer.current = setTimeout(write, 500);
+    } else {
+      await write();
+    }
   }, [currentId, refreshProjects]);
+
+  // an edit to the ACTIVE song: update its model in the book, debounced save
+  const onMusicChange = useCallback((m) => {
+    setMusic(m);
+    setSongs((prev) => {
+      const next = (prev ?? [{ name: "song 0", model: m }]).slice();
+      const i = Math.min(songIdx, next.length - 1);
+      next[i] = { ...next[i], model: m };
+      persistSongbook(next, i, true);
+      return next;
+    });
+  }, [songIdx, persistSongbook]);
 
   const addMusic = useCallback(async () => {
     const m = newSong();
-    setMusic(m); setView("music");
-    if (!currentId) return;
-    const rec = await getProject(currentId);
-    if (!rec) return;
-    rec.files["music.json"] = JSON.stringify(m);
-    await saveProject(rec, Date.now());
-    refreshProjects();
-  }, [currentId, refreshProjects]);
+    const book = [{ name: "song 0", model: m }];
+    setSongs(book); setSongIdx(0); setMusic(m); setView("music");
+    await persistSongbook(book, 0, false);
+  }, [persistSongbook]);
 
-  // insert a hexdata(...) + song() snippet into main.lua so the tune plays
-  // Copy the tracker song as a single `hexdata(...)` line to the clipboard. The
-  // SDK's only way to embed a composed song is a hexdata blob the game plays
-  // with song()/music_bank(); there is no build-side song input. Rather than
-  // splicing code into the file (which would collide with the user's _init), we
-  // hand over one line and let the user paste it where it belongs.
+  // add another song to the book and switch to it
+  const addSong = useCallback(async () => {
+    const m = newSong();
+    setSongs((prev) => {
+      const base = prev ?? [];
+      const name = defaultSongName({ songs: base });
+      const next = [...base, { name, model: m }];
+      const i = next.length - 1;
+      setSongIdx(i); setMusic(m);
+      persistSongbook(next, i, false);
+      return next;
+    });
+  }, [persistSongbook]);
+
+  const selectSong = useCallback((i) => {
+    setSongIdx(i);
+    setMusic(songs?.[i]?.model ?? null);
+    persistSongbook(songs, i, false);
+  }, [songs, persistSongbook]);
+
+  const renameSong = useCallback((i, name) => {
+    setSongs((prev) => {
+      if (!prev) return prev;
+      const next = prev.slice();
+      next[i] = { ...next[i], name };
+      persistSongbook(next, songIdx, false);
+      return next;
+    });
+  }, [songIdx, persistSongbook]);
+
+  const deleteSong = useCallback(async (i) => {
+    if (!songs || songs.length === 0) return;
+    const next = songs.slice();
+    next.splice(i, 1);
+    if (next.length === 0) {
+      // last song removed -> project has no music again
+      setSongs(null); setSongIdx(0); setMusic(null); setView("code");
+      if (currentId) {
+        const rec = await getProject(currentId);
+        if (rec) { delete rec.files["music.json"]; await saveProject(rec, Date.now()); refreshProjects(); }
+      }
+      return;
+    }
+    const ni = Math.min(i, next.length - 1);
+    setSongs(next); setSongIdx(ni); setMusic(next[ni].model);
+    await persistSongbook(next, ni, false);
+  }, [songs, currentId, persistSongbook, refreshProjects]);
+
+  // Copy the ACTIVE song as a single `hexdata(...)` line to the clipboard, named
+  // after the song (so multiple songs land in distinct variables). The SDK's
+  // only way to embed a composed song is a hexdata blob the game plays with
+  // song()/music_bank(); there is no build-side song input. We hand over one
+  // line rather than splicing code into the file (which would collide with the
+  // user's _init).
   const [copiedSong, setCopiedSong] = useState(false);
   const copySongLine = useCallback(async () => {
     if (!music) return;
     const hex = toHex(songToBytes(music));
-    const line = `local tune = hexdata("${hex}")`;
+    const name = songVarName(songs?.[songIdx]?.name, songIdx);
+    const line = `local ${name} = hexdata("${hex}")`;
     try { await navigator.clipboard.writeText(line); } catch { /* clipboard blocked */ }
     setCopiedSong(true);
     setTimeout(() => setCopiedSong(false), 1500);
-  }, [music]);
+  }, [music, songs, songIdx]);
 
   // --- project ops ---------------------------------------------------------
   const newProject = useCallback(async () => {
@@ -438,12 +509,34 @@ export function App() {
             {view === "frames" && <FrameEditor sheet={sheet} frames={frames || []} onChange={onFramesChange} />}
             {view === "music" && (
               <div className="music-pane-wrap">
+                <div className="song-bar" title="a project can hold several songs; a game plays one at a time with song()">
+                  {(songs ?? []).map((s, i) => (
+                    <button
+                      key={i}
+                      className={"song-tab " + (i === songIdx ? "sel" : "")}
+                      onClick={() => selectSong(i)}
+                      onDoubleClick={() => {
+                        const name = prompt("song name", s.name);
+                        if (name != null && name.trim()) renameSong(i, name.trim());
+                      }}
+                      title="click to switch · double-click to rename"
+                    >{s.name}</button>
+                  ))}
+                  <button className="song-add" onClick={addSong} title="add another song">＋</button>
+                  {songs && songs.length > 0 && (
+                    <button
+                      className="song-del"
+                      onClick={() => { if (confirm(`Delete "${songs[songIdx].name}"?`)) deleteSong(songIdx); }}
+                      title="delete the active song"
+                    >🗑</button>
+                  )}
+                </div>
                 <div className="music-usebar">
                   <button className="tb-btn" onClick={copySongLine} title="copy this song as a hexdata(...) line to paste into your code">
                     {copiedSong ? "✓ copied" : "⧉ copy hexdata line"}
                   </button>
                   <span className="music-usehint">
-                    paste it into your Lua, then play it: <code>song(tune)</code> in <code>_init()</code>
+                    copies <code>local {songVarName(songs?.[songIdx]?.name, songIdx)} = hexdata(...)</code> · play it with <code>song({songVarName(songs?.[songIdx]?.name, songIdx)})</code>
                   </span>
                 </div>
                 <MusicEditor song={music} onChange={onMusicChange} />

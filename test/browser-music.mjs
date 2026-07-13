@@ -1,6 +1,6 @@
 // Playwright: the music tracker. Add a track, place notes in the grid, verify
-// the grid -> .gtm2 encode is valid, "use in game" inserts a hexdata+song()
-// snippet, and a song-bearing game builds to a cart.
+// the grid -> .gtm2 encode is valid, the "copy hexdata line" button copies a
+// valid line, multiple songs can be added, and a song-bearing game builds.
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
@@ -21,6 +21,8 @@ try {
   proc = await startVite();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+  // clipboard read/write permission so the copy-hexdata button is verifiable
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: `http://localhost:${PORT}` });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".sidebar");
@@ -55,11 +57,33 @@ try {
   });
   check("grid encodes to a valid .gtm2 (parses back)", gtm2ok);
 
-  // "use in game" inserts a hexdata + song snippet into main.lua
+  // the "copy hexdata line" button copies a valid `local <name> = hexdata(...)`
+  // line to the clipboard (no longer mangles main.lua)
   await page.click(".music-usebar .tb-btn");
-  await page.waitForTimeout(400);
-  const src = await page.evaluate(() => window.__gtlua_test.getSource());
-  check("use-in-game inserted hexdata + song()", /hexdata\("[0-9a-f]+"\)/.test(src) && /song\(tune/.test(src));
+  await page.waitForTimeout(300);
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  check("copy-hexdata copied a hexdata line", /local \w+ = hexdata\("[0-9a-f]+"\)/.test(clip));
+  const srcAfter = await page.evaluate(() => window.__gtlua_test.getSource());
+  check("copy did NOT mutate main.lua", !/hexdata/.test(srcAfter));
+
+  // multiple songs: add a second, verify the song bar shows 2, both switchable
+  await page.click(".song-bar .song-add");
+  await page.waitForTimeout(200);
+  const nTabs = await page.locator(".song-bar .song-tab").count();
+  check("added a second song (2 song tabs)", nTabs === 2);
+  await page.locator(".song-bar .song-tab").nth(0).click();
+  await page.waitForTimeout(150);
+  const firstSel = await page.locator(".song-bar .song-tab.sel").first().getAttribute("class");
+  check("can switch back to the first song", /sel/.test(firstSel || ""));
+
+  // both songs survive a reload (persisted in the songbook)
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".sidebar");
+  await page.waitForTimeout(600);
+  await page.click(".pane-tabs .tab >> text=music");
+  await page.waitForTimeout(200);
+  const nTabsReload = await page.locator(".song-bar .song-tab").count();
+  check("both songs persisted across reload", nTabsReload === 2);
 
   // build the song-bearing game -> a cart is produced
   await page.click("button.play");
@@ -74,5 +98,5 @@ try {
 } finally {
   if (proc) try { process.kill(-proc.pid, "SIGKILL"); } catch {}
 }
-console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - music tracker (grid + gtm2 encode + use-in-game + build)");
+console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - music tracker (grid + gtm2 encode + copy-hexdata + multi-song + build)");
 process.exit(failed ? 1 : 0);
