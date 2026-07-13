@@ -46,11 +46,18 @@ export function rgbaToSheet({ width, height, rgba }, { alphaCutoff = 128 } = {})
   const sheet = newSheet();
   const w = Math.min(width, SHEET_DIM);
   const h = Math.min(height, SHEET_DIM);
+  // nearestColorByte scans all 256 palette entries per call; pixel art repeats a
+  // handful of colors heavily, so cache color(packed RGB) -> byte and only scan
+  // once per distinct color (turns ~4M scans into a few dozen).
+  const cache = new Map();
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const o = (y * width + x) * 4;
       if (rgba[o + 3] < alphaCutoff) continue;   // stays byte 0 (transparent)
-      sheet[y * SHEET_DIM + x] = nearestColorByte(rgba[o], rgba[o + 1], rgba[o + 2]);
+      const key = (rgba[o] << 16) | (rgba[o + 1] << 8) | rgba[o + 2];
+      let byte = cache.get(key);
+      if (byte === undefined) { byte = nearestColorByte(rgba[o], rgba[o + 1], rgba[o + 2]); cache.set(key, byte); }
+      sheet[y * SHEET_DIM + x] = byte;
     }
   }
   return { sheet, width, height, cropped: width > SHEET_DIM || height > SHEET_DIM };
