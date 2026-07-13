@@ -14,6 +14,7 @@ local score = 0
 local dead = 0         -- death-blink timer
 local wave = 1
 local cool = 0         -- fire cooldown
+local etick = 0        -- enemy movement clock (slows their drift)
 
 local bx = array8(8)   -- bullets
 local by = array8(8)
@@ -110,15 +111,21 @@ function _update60()
     end
   end
 
-  -- enemies: drift down slowly (every 2 frames), gentle wiggle
+  -- enemies drift down GENTLY: one pixel every 4 frames (~15 px/sec, ~8s to
+  -- cross the screen) so you have time to aim, plus a slow sideways sway.
+  etick += 1
+  local step_down = 0
+  if (etick % 4 == 0) step_down = 1
   local alive = 0
   for i = 1, 10 do
     if eon[i] == 1 then
       alive += 1
-      et[i] = (et[i] + 1) % 96
-      -- descend every other frame (~30 px/sec), gentle sideways wiggle
-      if (et[i] % 2 == 0) ey[i] += 1
-      if et[i] < 48 then ex[i] += 1 else ex[i] -= 1 end
+      et[i] = (et[i] + 1) % 128
+      ey[i] += step_down
+      -- sway ~1px every 4 frames (half the row is drift-right, half drift-left)
+      if etick % 4 == 0 then
+        if et[i] < 64 then ex[i] += 1 else ex[i] -= 1 end
+      end
       ex[i] = mid(2, ex[i], 118)
 
       if ey[i] > 120 then

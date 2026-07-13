@@ -11,12 +11,14 @@ local p2y = 52
 local PH = 20          -- paddle height
 local bx = 62          -- ball top-left
 local by = 60
-local vx = 2
+local vx = 1           -- ball velocity (slower than before)
 local vy = 1
 local s1 = 0           -- scores
 local s2 = 0
 local serve = 30       -- countdown before the ball moves after a point
 local win = 0          -- 0 none, 1 P1, 2 P2 (flash)
+local p2_human = 0     -- becomes 1 the first time P2 presses a button; else AI
+local btick = 0        -- ball clock: the ball only steps on some frames (pacing)
 
 local col_court, col_net, col_p1, col_p2, col_hud
 
@@ -65,11 +67,23 @@ function _update60()
     return
   end
 
-  -- paddles: P1 on controller 0, P2 on controller 1 (up = btn 2, down = btn 3)
-  if (btn(2)) p1y -= 3
-  if (btn(3)) p1y += 3
-  if (btn(2, 1)) p2y -= 3
-  if (btn(3, 1)) p2y += 3
+  -- paddles: P1 on controller 0 (up = btn 2, down = btn 3)
+  if (btn(2)) p1y -= 2
+  if (btn(3)) p1y += 2
+
+  -- P2 on controller 1 - but if no one's touched it, the computer plays (AI).
+  -- The first P2 button press flips to human control.
+  if btn(2, 1) or btn(3, 1) then p2_human = 1 end
+  if p2_human == 1 then
+    if (btn(2, 1)) p2y -= 2
+    if (btn(3, 1)) p2y += 2
+  else
+    -- AI: ease the paddle center toward the ball (a bit laggy so it's beatable)
+    local target = by - (PH - 8) / 2
+    if p2y < target - 1 then p2y += 2 end
+    if p2y > target + 1 then p2y -= 2 end
+  end
+
   p1y = mid(2, p1y, 126 - PH)
   p2y = mid(2, p2y, 126 - PH)
 
@@ -78,7 +92,9 @@ function _update60()
     return
   end
 
-  -- ball
+  -- ball moves every OTHER frame so it's a comfortable speed (was every frame)
+  btick += 1
+  if (btick % 2 ~= 0) return
   bx += vx
   by += vy
 

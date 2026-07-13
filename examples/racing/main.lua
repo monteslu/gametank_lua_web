@@ -51,19 +51,15 @@ function _update60()
     return
   end
 
-  -- throttle: base speed 2, A boosts to 4
-  local speed = 2
-  if (btn(4)) speed = 4
+  -- throttle: gentle base speed, A boosts. (halved from before - it was too fast)
+  local speed = 1
+  if (btn(4)) speed = 2
 
-  -- steer
+  -- steer, then CLAMP to the road - you don't die at the edges, you just can't
+  -- drive off them.
   if (btn(0)) px -= 2
   if (btn(1)) px += 2
-
-  -- run off the edge of the road?
-  if px < ROAD_L - 1 or px > ROAD_R - 7 then
-    crash()
-    return
-  end
+  px = mid(ROAD_L, px, ROAD_R - 8)
 
   -- scroll the world (dashes) + accumulate distance
   scroll = (scroll + speed) % 16
