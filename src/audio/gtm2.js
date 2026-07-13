@@ -95,12 +95,15 @@ export function gtm2ToModel(bytes) {
     const notes = [0, 0, 0, 0];
     for (const ch of [0, 1, 2, 3]) {
       const n = e.notes && e.notes[ch];
-      if (n !== undefined && n !== null) notes[ch] = typeof n === "object" ? n.note : n;
+      if (n === undefined || n === null) continue;
+      // preserve per-note velocity (as {note,vel}) when the song carries it
+      if (typeof n === "object") notes[ch] = song.velocity && n.vel != null ? { note: n.note, vel: n.vel } : n.note;
+      else notes[ch] = n;
     }
     placed.push({ step, notes });
   }
   const steps = Math.max(4, Math.min(64, (placed.length ? placed[placed.length - 1].step : 0) + 1));
   const grid = Array.from({ length: steps }, () => [0, 0, 0, 0]);
   for (const p of placed) if (p.step < steps) grid[p.step] = p.notes;
-  return { steps, delay: unit, instruments: song.instruments.slice(0, 4), grid };
+  return { steps, delay: unit, velocity: !!song.velocity, instruments: song.instruments.slice(0, 4), grid };
 }

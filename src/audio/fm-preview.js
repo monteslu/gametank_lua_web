@@ -89,9 +89,9 @@ export class FmPreview {
   }
 
   // Play a single note now (for the piano key-press preview). midi is 1-based.
-  playNote(instr, midi, durSec = 0.35) {
+  playNote(instr, midi, durSec = 0.35, vel = 63) {
     const ctx = this.ensure();
-    this.voice(instr | 0, noteToFreq(midi), ctx.currentTime + 0.01, durSec);
+    this.voice(instr | 0, noteToFreq(midi), ctx.currentTime + 0.01, durSec, vel);
   }
 
   play(song, { fps = 60, loop = false } = {}) {

@@ -126,6 +126,27 @@ try {
   const afterDel = await page.evaluate(() => [...document.querySelectorAll(".mg-row")][2].querySelectorAll(".mg-cell")[1].textContent);
   check("Delete clears the cell under the cursor", afterDel === "·");
 
+  // --- per-note velocity ---
+  await page.locator(".mpb-vel input[type=checkbox]").check();
+  await page.waitForTimeout(120);
+  const velEnabled = await page.evaluate(() => document.querySelector(".mpb-vel input[type=checkbox]").checked);
+  check("velocity mode toggles on", velEnabled);
+
+  // place a full-vel note (step 6 ch 0), then a low-vel note (step 7 ch 0)
+  await page.locator(".mpb-vel input[type=range]").fill("63");
+  await page.locator(".mg-row").nth(6).locator(".mg-cell").nth(0).click();
+  await page.locator(".mg-row").nth(7).locator(".mg-cell").nth(0).click();
+  await page.locator(".mpb-vel input[type=range]").fill("10");  // lowers step-7 (cursor there)
+  await page.waitForTimeout(150);
+  const vops = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".mg-row")];
+    const op = (r) => { const c = rows[r].querySelectorAll(".mg-cell")[0]; return c.classList.contains("on") ? Math.round(getComputedStyle(c).opacity * 100) / 100 : null; };
+    return { hi: op(6), lo: op(7) };
+  });
+  console.log("     velocity opacities: full=" + vops.hi + " low=" + vops.lo);
+  check("full-velocity note is bright", vops.hi > 0.9);
+  check("low-velocity note is dimmed", vops.lo != null && vops.lo < 0.7);
+
   await browser.close();
 } catch (e) {
   console.log("TEST ERROR:", (e.message || String(e)).split("\n")[0]);

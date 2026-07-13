@@ -96,8 +96,10 @@ export function midiToSong(buf, { stepsPerBeat = 4, maxSteps = 64, instruments =
       const free = [0, 1, 2, 3].find((c) => !grid[p.step][c]);
       if (free !== undefined) ch = free; else continue;   // step full, drop
     }
-    grid[p.step][ch] = p.note & 0xff;
+    // carry MIDI velocity (0-127) into GameTank velocity (0-63) as {note,vel}
+    const gvel = Math.max(1, Math.min(63, Math.round((p.vel ?? 127) / 2)));
+    grid[p.step][ch] = { note: p.note & 0xff, vel: gvel };
   }
 
-  return { steps, delay: ticksPerStep >= 1 ? 8 : 8, instruments, grid };
+  return { steps, delay: 8, velocity: true, instruments, grid };
 }

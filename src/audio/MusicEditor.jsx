@@ -15,6 +15,14 @@ for (let oct = 2; oct <= 6; oct++) {
   }
 }
 const CH_COLORS = ["#ff7ac6", "#57e2e5", "#ffd45e", "#b48cff"];
+const MAX_VEL = 63;          // GameTank velocity is 6-bit (0-63)
+const DEFAULT_VEL = 63;
+
+// A grid cell is either a plain note number (velocity = default) or a
+// { note, vel } object (per-note velocity). These read/normalize either shape.
+const noteOf = (cell) => (cell && typeof cell === "object" ? cell.note : cell) || 0;
+const velOf = (cell) => (cell && typeof cell === "object" && cell.vel != null ? cell.vel : DEFAULT_VEL);
+const makeCell = (note, vel, withVel) => (note && withVel && vel !== DEFAULT_VEL ? { note, vel } : note);
 
 // Computer-keyboard -> note, the tracker/DAW layout (Renoise/FL/LMMS style):
 // the Z row is the base octave, the Q row is one octave up. Value = semitone
@@ -42,6 +50,7 @@ export function MusicEditor({ song, onChange }) {
   const [pitch, setPitch] = useState(noteNum("c4"));
   const [baseOctave, setBaseOctave] = useState(4);   // Z row = this octave's C
   const [cursor, setCursor] = useState({ step: 0, ch: 0 });   // edit cursor
+  const [vel, setVel] = useState(DEFAULT_VEL);       // velocity for placed notes
   const rootRef = useRef(null);
   const heldKeys = useRef(new Set());
 
@@ -56,16 +65,36 @@ export function MusicEditor({ song, onChange }) {
     setCursor((c) => (c.step < model.steps ? c : { ...c, step: model.steps - 1 }));
   }, [model.steps]);
 
-  const setGrid = (step, ch, note) => {
+  // when the cursor lands on a note, reflect its velocity in the slider
+  useEffect(() => {
+    if (!model.velocity) return;
+    const cell = model.grid[cursor.step]?.[cursor.ch];
+    if (noteOf(cell)) setVel(velOf(cell));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursor.step, cursor.ch, model.velocity]);
+
+  // place a note (with an optional velocity) at a cell; 0 clears it. When the
+  // song is in velocity mode a non-default velocity is stored as {note,vel}.
+  const setGrid = (step, ch, note, noteVel = vel) => {
     const grid = model.grid.map((row) => row.slice());
-    grid[step][ch] = note;
+    grid[step][ch] = makeCell(note, noteVel, model.velocity);
     onChange({ ...model, grid });
   };
 
+  // set the velocity of the cell under the cursor (in velocity mode)
+  const setCellVel = (v) => {
+    const cur = model.grid[cursor.step]?.[cursor.ch];
+    const n = noteOf(cur);
+    if (!n) return;
+    const grid = model.grid.map((row) => row.slice());
+    grid[cursor.step][cursor.ch] = makeCell(n, v, true);
+    onChange({ ...model, velocity: true, grid });
+  };
+
   // hear a note when you pick it on the piano (uses channel 0's instrument)
-  const previewNote = useCallback((midi) => {
-    if (!playing) preview.current?.playNote(model.instruments[0] ?? 0, midi);
-  }, [playing, model.instruments]);
+  const previewNote = useCallback((midi, v = vel) => {
+    if (!playing) preview.current?.playNote(model.instruments[0] ?? 0, midi, 0.35, v);
+  }, [playing, model.instruments, vel]);
 
   // Computer-keyboard editing, tracker-style: note keys (Z/Q rows) PLACE the note
   // at the edit cursor and advance a row (like Renoise/FL); arrows move the
@@ -165,13 +194,14 @@ export function MusicEditor({ song, onChange }) {
       const notes = {};
       let any = false;
       for (let ch = 0; ch < CHANNELS; ch++) {
-        const n = model.grid[s][ch];
-        if (n) { notes[ch] = n; any = true; }
+        const cell = model.grid[s][ch];
+        const note = noteOf(cell);
+        if (note) { notes[ch] = model.velocity ? { note, vel: velOf(cell) } : note; any = true; }
       }
       if (any) { events.push({ delay: pending, notes }); pending = model.delay; }
       else pending += model.delay;
     }
-    return { instruments: model.instruments, events };
+    return { velocity: !!model.velocity, instruments: model.instruments, events };
   }, [model]);
 
   const play = useCallback(() => {
@@ -229,8 +259,16 @@ export function MusicEditor({ song, onChange }) {
         <div className="mpb-info">
           <span className="mpb-label">note <b>{nameOf(pitch)}</b></span>
           <span className="mpb-kbd">play with the keyboard: Z/S/X… row = oct {baseOctave}, Q/2/W… = oct {baseOctave + 1} · [ ] change octave</span>
+          <label className="mpb-vel" title="per-note velocity (loudness, 0-63). On: notes carry velocity; the slider sets new notes + the cursor note.">
+            <input type="checkbox" checked={!!model.velocity}
+              onChange={(e) => onChange({ ...model, velocity: e.target.checked })} />
+            velocity
+            <input type="range" min="1" max={MAX_VEL} value={vel} disabled={!model.velocity}
+              onChange={(e) => { const v = +e.target.value; setVel(v); if (model.velocity) setCellVel(v); }} />
+            <b>{model.velocity ? vel : "—"}</b>
+          </label>
         </div>
-        <Piano value={pitch} onChange={setPitch} onPreview={previewNote} baseOctave={baseOctave} />
+        <Piano value={pitch} onChange={setPitch} onPreview={(m) => previewNote(m, vel)} baseOctave={baseOctave} />
       </div>
 
       {/* channel headers with instrument pickers */}
@@ -251,18 +289,24 @@ export function MusicEditor({ song, onChange }) {
         {model.grid.slice(0, model.steps).map((row, s) => (
           <div key={s} className={"mg-row " + (s === playRow ? "play" : "") + (s % 4 === 0 ? " beat" : "")}>
             <div className="mg-step">{s}</div>
-            {row.map((note, ch) => (
-              <button
-                key={ch}
-                className={"mg-cell " + (note ? "on" : "") + (cursor.step === s && cursor.ch === ch ? " cursor" : "")}
-                style={note ? { background: CH_COLORS[ch], color: "#1a1726" } : undefined}
-                onClick={() => { setCursor({ step: s, ch }); setGrid(s, ch, note ? 0 : pitch); }}
-                onContextMenu={(e) => { e.preventDefault(); setCursor({ step: s, ch }); setGrid(s, ch, 0); }}
-                title={note ? nameOf(note) + " (click to clear)" : "click to place " + nameOf(pitch)}
-              >
-                {note ? nameOf(note) : "·"}
-              </button>
-            ))}
+            {row.map((cell, ch) => {
+              const note = noteOf(cell);
+              const v = velOf(cell);
+              // dim the cell toward the background as velocity drops (velocity mode)
+              const intensity = model.velocity ? 0.35 + 0.65 * (v / MAX_VEL) : 1;
+              return (
+                <button
+                  key={ch}
+                  className={"mg-cell " + (note ? "on" : "") + (cursor.step === s && cursor.ch === ch ? " cursor" : "")}
+                  style={note ? { background: CH_COLORS[ch], color: "#1a1726", opacity: intensity } : undefined}
+                  onClick={() => { setCursor({ step: s, ch }); setGrid(s, ch, note ? 0 : pitch); }}
+                  onContextMenu={(e) => { e.preventDefault(); setCursor({ step: s, ch }); setGrid(s, ch, 0); }}
+                  title={note ? `${nameOf(note)}${model.velocity ? ` · vel ${v}` : ""} (click to clear)` : "click to place " + nameOf(pitch)}
+                >
+                  {note ? nameOf(note) : "·"}
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -290,9 +334,13 @@ export function songToBytes(model) {
   let pending = model.delay;
   for (let s = 0; s < model.steps; s++) {
     const notes = {}; let any = false;
-    for (let ch = 0; ch < CHANNELS; ch++) { const n = model.grid[s][ch]; if (n) { notes[ch] = n; any = true; } }
+    for (let ch = 0; ch < CHANNELS; ch++) {
+      const cell = model.grid[s][ch];
+      const note = noteOf(cell);
+      if (note) { notes[ch] = model.velocity ? { note, vel: velOf(cell) } : note; any = true; }
+    }
     if (any) { events.push({ delay: pending, notes }); pending = model.delay; }
     else pending += model.delay;
   }
-  return encodeGtm2({ instruments: model.instruments, events });
+  return encodeGtm2({ velocity: !!model.velocity, instruments: model.instruments, events });
 }

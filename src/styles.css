@@ -290,6 +290,10 @@ body {
 .mpb-label { font: 12px var(--mono); color: var(--dim); }
 .mpb-label b { color: var(--sun); }
 .mpb-kbd { font: 10px var(--mono); color: var(--grape); }
+.mpb-vel { display: flex; align-items: center; gap: 6px; font: 11px var(--mono); color: var(--dim); margin-top: 2px; }
+.mpb-vel input[type="range"] { width: 90px; }
+.mpb-vel input[type="range"]:disabled { opacity: 0.4; }
+.mpb-vel b { color: var(--sun); min-width: 18px; }
 .piano { flex: 1; min-width: 0; }
 .piano-keys { position: relative; display: flex; height: 68px; max-width: 620px; user-select: none; }
 .pk-white {
