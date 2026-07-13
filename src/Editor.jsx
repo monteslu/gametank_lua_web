@@ -97,13 +97,14 @@ const SIGNATURES = {
   "gt.phys_drag": ["(vx, vy, act, n)", "apply drag to the ball table"],
   "gt.phys_draw": ["(x, y, cells, n)", "draw the body table in bulk asm (size from gt.phys_sprite)"],
   "gt.parts_step": ["(pool)", "step a particle pool (move + age) in asm"],
-  "gt.starfield_init": ["(n, [far], [mid], [near])", "parallax starfield: n stars; optional colors per depth tier"],
-  "gt.starfield_move": ["(mode)", "scroll the starfield"],
-  "gt.starfield_draw": ["()", "draw the starfield"],
-  "gt.flakes_init": ["(n)", "drifting flakes/snow: allocate n"],
-  "gt.flakes_set": ["(i, x, y, w, h, spd8, col)", "manual slot setup for a custom layer"],
-  "gt.flakes_draw": ["(dx, dy)", "draw the flakes, drifting by dx,dy"],
-  "gt.flakes_mode": ["(m)", "flake motion mode"],
+  "gt.parallax_init": ["(n, [far], [mid], [near])", "parallax field: n drifting stars/specks; optional colors per depth tier"],
+  "gt.parallax_move": ["(mode)", "scroll the parallax field"],
+  "gt.parallax_draw": ["()", "draw the parallax field"],
+  "gt.drift_init": ["(n)", "drifting particle layer (snow/rain/embers): allocate n"],
+  "gt.drift_set": ["(i, x, y, w, h, spd8, col)", "restyle one drift slot (size/speed/color)"],
+  "gt.drift_draw": ["(dx, dy)", "draw the drift layer, drifting by dx,dy"],
+  "gt.drift_draw_range": ["(first, count, dx, dy)", "draw a slice of the drift slots (layering)"],
+  "gt.drift_mode": ["(i, m)", "drift motion mode for a slot"],
   "gt.dbar": ["(px, py, v, m, col, col2, bg)", "segmented HUD bar: value v of max m (bg >= 16 skips the strip)"],
   "gt.dbar_style": ["(scale, strip_w, h, defc)", "bar look: px-per-unit scale (/256, default 77), strip width, height, deficit color"],
   "gt.print_buf": ["(buf, off, x, y, col)", "fast HUD text from a byte buffer (no string building)"],
@@ -128,10 +129,18 @@ function registerGtLua(m) {
       const K = m.languages.CompletionItemKind;
       // after `gt.` suggest members
       if (/\bgt\.\w*$/.test(line)) {
+        // tiers keep the everyday API on top; specialist engines sink
+        const tierOf = (n) => {
+          if (["rgb", "ticks", "border", "autocls", "print_buf", "note", "noteoff"].includes(n)) return "1";
+          if (/^(phys_|pool_|parts_|hit_scan|dbar|parallax_|drift_|chain)/.test(n)) return "2";
+          if (/^(bg_|gspr|canvas_view|tiles_draw|gflush)/.test(n)) return "3";
+          return "4";   // track_*, chunks_draw, mark, the exotic rest
+        };
         return { suggestions: GT_MEMBER_NAMES.map((name) => {
           const sig = SIGNATURES["gt." + name];
           return {
             label: name, kind: K.Method, insertText: name, range,
+            sortText: tierOf(name) + "_" + name,
             detail: sig ? "gt." + name + sig[0] : "gt." + name,
             documentation: sig ? sig[1] : undefined,
           };
