@@ -4,7 +4,14 @@
 // mounted once), driven request/response by id. Both the React app and the
 // test hook use this so there's one place that owns the worker protocol.
 
-/** @typedef {{ num8?: boolean, sheetBytes?: ArrayBuffer, framesBytes?: ArrayBuffer, onProgress?: (msg:string)=>void }} BuildOpts */
+/**
+ * @typedef {object} BuildOpts
+ * @property {boolean} [num8]
+ * @property {Record<string, Uint8Array>} [quadrantBytes] up to 4 sprite-sheet
+ *   quadrant files, keyed by filename (gfx.gtg + gfx_1/2/3.gtg)
+ * @property {ArrayBuffer} [framesBytes] encoded .gsi frame table
+ * @property {(msg:string)=>void} [onProgress]
+ */
 
 let worker = null;
 let nextId = 1;

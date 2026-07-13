@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { SHEET_DIM, getPixel, setPixel, fromGtg, toGtg } from "./gtg.js";
+import { SHEET_DIM, QUAD_DIM, getPixel, setPixel, fromGtg, quadrantOf, setQuadrant, newSheet } from "./gtg.js";
 import { byteToRgb, TRANSPARENT } from "./palette.js";
 import { PalettePicker } from "./PalettePicker.jsx";
 import { pngToSheet, rgbaToSheet } from "./png-import.js";
@@ -29,23 +29,74 @@ function drawSheet(ctx, sheet) {
   ctx.putImageData(img, 0, 0);
 }
 
+// Draw the guide overlay onto a transparent canvas the same pixel size as the
+// zoomed sheet: the four 128x128 quadrant borders (the full GameTank GRAM page),
+// and the 16x16 8x8-cell grid inside the NW quadrant - that's the grid spr(n)
+// indexes (cells 0-255 all live in NW; NE/SW/SE are reached via .gsi frames).
+function drawGuides(ctx, zoom, showCells) {
+  const px = SHEET_DIM * zoom;
+  ctx.clearRect(0, 0, px, px);
+  if (showCells) {
+    // faint 8x8 cell grid over the NW quadrant only
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 8; i < QUAD_DIM; i += 8) {
+      const p = i * zoom + 0.5;
+      ctx.moveTo(p, 0); ctx.lineTo(p, QUAD_DIM * zoom);
+      ctx.moveTo(0, p); ctx.lineTo(QUAD_DIM * zoom, p);
+    }
+    ctx.stroke();
+  }
+  // quadrant borders (the 128px midlines) - brighter
+  const mid = QUAD_DIM * zoom + 0.5;
+  ctx.strokeStyle = "rgba(120,200,255,0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(mid, 0); ctx.lineTo(mid, px);
+  ctx.moveTo(0, mid); ctx.lineTo(px, mid);
+  ctx.stroke();
+}
+
+// spr() cell index (0-255) for a pixel in the NW quadrant, or null elsewhere.
+function cellAt(x, y) {
+  if (x >= QUAD_DIM || y >= QUAD_DIM) return null;
+  return (y >> 3) * 16 + (x >> 3);
+}
+const QUAD_NAME = ["NW (spr grid)", "NE", "SW", "SE"];
+function quadAt(x, y) {
+  return (x >= QUAD_DIM ? 1 : 0) + (y >= QUAD_DIM ? 2 : 0);
+}
+
 /**
- * A 128x128 sprite-sheet editor. `sheet` is a Uint8Array(16384) of raw color
- * bytes; onChange fires with a NEW array after each edit (immutable so React
- * and autosave see the change). Tools: pencil, eraser, fill, line, rect.
+ * A 256x256 sprite-sheet editor (the full GameTank GRAM page = four 128x128
+ * quadrants). `sheet` is a Uint8Array(65536) of raw color bytes; onChange fires
+ * with a NEW array after each edit (immutable so React and autosave see the
+ * change). spr(n) cells 0-255 index the NW quadrant; the other quadrants are for
+ * .gsi frame tables (sprf) and gt.bg_* canvas work. Tools: pencil, eraser, fill,
+ * line, rect.
  */
 export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const canvasRef = useRef(null);
-  const [zoom, setZoom] = useState(4);
+  const overlayRef = useRef(null);
+  const [zoom, setZoom] = useState(3);
   const [tool, setTool] = useState("pencil");
   const [color, setColor] = useState(8);         // a visible default (P8 red byte)
+  const [showGrid, setShowGrid] = useState(true);
+  const [hover, setHover] = useState(null);      // { x, y, cell, quad } cursor readout
   const drawing = useRef(null);                  // { startX, startY, base } during a drag
 
-  // repaint whenever the sheet changes
+  // repaint the sheet whenever it changes
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) drawSheet(ctx, sheet);
   }, [sheet]);
+
+  // repaint the guide overlay when zoom / grid toggle change
+  useEffect(() => {
+    const ctx = overlayRef.current?.getContext("2d");
+    if (ctx) drawGuides(ctx, zoom, showGrid);
+  }, [zoom, showGrid]);
 
   const pixelAt = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -111,9 +162,10 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   };
 
   const onMove = (e) => {
+    const p = pixelAt(e);
+    if (p) setHover({ x: p.x, y: p.y, cell: cellAt(p.x, p.y), quad: quadAt(p.x, p.y) });
     const d = drawing.current;
     if (!d) return;
-    const p = pixelAt(e);
     if (!p) return;
     if (d.tool === "pencil" || d.tool === "eraser") {
       const buf = new Uint8Array(sheet);
@@ -167,17 +219,26 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     } catch (e) { flash(`import failed: ${e.message}`); }
   }, [onChange, onImportAnimation]);
 
-  // raw .gtg import/export - the exact file a C-SDK build consumes, so assets
-  // round-trip between our editor and a C GameTank project.
+  // raw .gtg import/export - the exact 128x128 quadrant file a C-SDK build
+  // consumes (gfx.gtg / gfx_1 / _2 / _3), so assets round-trip between our editor
+  // and a C GameTank project. A .gtg is ONE quadrant; import drops it into the
+  // chosen quadrant, export emits the chosen quadrant.
+  const [quad, setQuad] = useState(0);   // which 128x128 quadrant .gtg I/O targets
   const importGtg = useCallback(async () => {
     const picked = await pickFile(".gtg");
     if (!picked) return;
-    try { onChange(fromGtg(picked.bytes)); flash("imported .gtg sheet"); }
-    catch (e) { flash(`import failed: ${e.message}`); }
-  }, [onChange]);
+    try {
+      const q = fromGtg(picked.bytes);           // validates 16384 bytes
+      const buf = sheet ? new Uint8Array(sheet) : newSheet();
+      setQuadrant(buf, quad, q);
+      onChange(buf);
+      flash(`imported .gtg into ${QUAD_NAME[quad].split(" ")[0]}`);
+    } catch (e) { flash(`import failed: ${e.message}`); }
+  }, [onChange, sheet, quad]);
   const exportGtg = useCallback(() => {
-    downloadBytes("sheet.gtg", toGtg(sheet), "application/octet-stream");
-  }, [sheet]);
+    const names = ["gfx.gtg", "gfx_1.gtg", "gfx_2.gtg", "gfx_3.gtg"];
+    downloadBytes(names[quad], quadrantOf(sheet, quad), "application/octet-stream");
+  }, [sheet, quad]);
 
   return (
     <div className="sprite-editor">
@@ -187,26 +248,49 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
         ))}
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
-        <button className="tool import" onClick={importImage} title="import a PNG or Aseprite file (nearest-color to the GameTank palette)">import image</button>
-        <button className="tool" onClick={importGtg} title="import a raw .gtg sheet (e.g. from a C project)">.gtg ▾</button>
-        <button className="tool" onClick={exportGtg} title="export the sheet as a raw .gtg (for a C project)">.gtg ▴</button>
+        <button className="tool import" onClick={importImage} title="import a PNG or Aseprite file (nearest-color to the GameTank palette; up to 256x256)">import image</button>
+        <label className="quad-sel" title="which 128x128 quadrant .gtg import/export targets (gfx.gtg / gfx_1 / _2 / _3)">
+          <select value={quad} onChange={(e) => setQuad(+e.target.value)}>
+            {QUAD_NAME.map((n, i) => <option key={i} value={i}>{["gfx.gtg", "gfx_1", "gfx_2", "gfx_3"][i]} · {n}</option>)}
+          </select>
+        </label>
+        <button className="tool" onClick={importGtg} title="import a raw 128x128 .gtg quadrant (e.g. from a C project) into the selected quadrant">.gtg ▾</button>
+        <button className="tool" onClick={exportGtg} title="export the selected quadrant as a raw .gtg (for a C project)">.gtg ▴</button>
+        <label className="grid-toggle" title="show the 8x8 cell grid (NW) + quadrant borders">
+          <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> grid
+        </label>
         <label className="zoom">zoom
-          <input type="range" min="2" max="20" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
+          <input type="range" min="1" max="12" value={zoom} onChange={(e) => setZoom(+e.target.value)} />
           {zoom}x
         </label>
       </div>
 
       <div className="sprite-body">
         <div className="sprite-canvas-wrap">
-          <canvas
-            ref={canvasRef}
-            className="sprite-canvas"
-            width={SHEET_DIM}
-            height={SHEET_DIM}
-            style={{ width: SHEET_DIM * zoom, height: SHEET_DIM * zoom }}
-            onMouseDown={onDown}
-            onMouseMove={onMove}
-          />
+          <div className="sprite-canvas-stack" style={{ width: SHEET_DIM * zoom, height: SHEET_DIM * zoom }}>
+            <canvas
+              ref={canvasRef}
+              className="sprite-canvas"
+              width={SHEET_DIM}
+              height={SHEET_DIM}
+              style={{ width: SHEET_DIM * zoom, height: SHEET_DIM * zoom }}
+              onMouseDown={onDown}
+              onMouseMove={onMove}
+              onMouseLeave={() => setHover(null)}
+            />
+            <canvas
+              ref={overlayRef}
+              className="sprite-overlay"
+              width={SHEET_DIM * zoom}
+              height={SHEET_DIM * zoom}
+              style={{ width: SHEET_DIM * zoom, height: SHEET_DIM * zoom }}
+            />
+          </div>
+          <div className="sprite-readout">
+            {hover
+              ? <span>x {hover.x} y {hover.y} · {QUAD_NAME[hover.quad]}{hover.cell != null ? ` · spr(${hover.cell})` : ""}</span>
+              : <span className="dim">256×256 page · NW = spr() cells 0-255 · other quadrants via .gsi frames</span>}
+          </div>
         </div>
         <PalettePicker value={color} onChange={setColor} />
       </div>

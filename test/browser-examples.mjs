@@ -32,7 +32,9 @@ try {
     await page.waitForTimeout(300);
     const src = await page.evaluate(() => window.__gtlua_test.getSource());
     const r = await page.evaluate((s) => window.__gtlua_test.build(s).then((b) => ({ ok: b.ok, len: b.gtr ? b.gtr.byteLength : 0 })).catch((e) => ({ ok: false, err: e.message })), src);
-    check(`${g} builds a valid cart`, r.ok && r.len === 32768);
+    // a valid cart is EEPROM32K (32768) or, if it overflows, FLASH2M (2 MB) -
+    // the puzzle's larger port re-targets to FLASH2M, which is still valid.
+    check(`${g} builds a valid cart`, r.ok && (r.len === 32768 || r.len === 2097152));
     if (!r.ok) console.log("     err:", r.err);
   }
 

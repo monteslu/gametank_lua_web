@@ -91,7 +91,7 @@ function fnv1aHex(data) {
 /**
  * Build a Lua game to a .gtr in the browser via the SDK's real build().
  * @param {string} source
- * @param {object} opts { num8, sheetBytes?, framesBytes?, __id }
+ * @param {object} opts { num8, quadrantBytes?, sheetBytes?, framesBytes?, __id }
  */
 async function buildCart(source, opts = {}) {
   const t0 = performance.now();
@@ -106,7 +106,20 @@ async function buildCart(source, opts = {}) {
     for (const [p, bytes] of shareCache.get(sub)) vfs.set(p, bytes);
   }
   vfs.set("/work/main.lua", enc.encode(source));
-  if (opts.sheetBytes) vfs.set("/work/gfx.gtg", new Uint8Array(opts.sheetBytes));
+  // sprite sheet: up to four 128x128 quadrant files (gfx.gtg + gfx_1/2/3.gtg).
+  // build()'s discoverQuadrants finds the siblings of the base gfx.gtg, so we
+  // just mount each present quadrant. (Legacy single-blob sheetBytes still
+  // accepted as the base quadrant, for callers not yet on quadrantBytes.)
+  let hasSheet = false;
+  if (opts.quadrantBytes) {
+    for (const [name, bytes] of Object.entries(opts.quadrantBytes)) {
+      vfs.set(`/work/${name}`, bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+      hasSheet = true;
+    }
+  } else if (opts.sheetBytes) {
+    vfs.set("/work/gfx.gtg", new Uint8Array(opts.sheetBytes));
+    hasSheet = true;
+  }
   if (opts.framesBytes) vfs.set("/work/gfx.gsi", new Uint8Array(opts.framesBytes));
 
   // SYNCHRONOUS tool runner with a CROSS-BUILD compile cache.
@@ -173,7 +186,7 @@ async function buildCart(source, opts = {}) {
     runTool,
   };
 
-  const sheetPath = opts.sheetBytes ? "/work/gfx.gtg" : undefined;
+  const sheetPath = hasSheet ? "/work/gfx.gtg" : undefined;
   const framesPath = opts.framesBytes ? "/work/gfx.gsi" : undefined;
   const gtrPath = "/work/game.gtr";
   await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath }, env);

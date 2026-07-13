@@ -44,7 +44,8 @@ try {
     const { pngToSheet } = await import("/src/gfx/png-import.js");
     const { nearestColorByte } = await import("/src/gfx/palette.js");
     const { sheet } = await pngToSheet(bytes);
-    const at = (x, y) => sheet[y * 128 + x];
+    const { SHEET_DIM } = await import("/src/gfx/gtg.js");
+    const at = (x, y) => sheet[y * SHEET_DIM + x];   // 256-wide full-page sheet
     return {
       red: at(4, 4), redExpect: nearestColorByte(255, 0, 0),
       green: at(20, 4), greenExpect: nearestColorByte(0, 255, 0),
@@ -54,7 +55,7 @@ try {
     };
   });
 
-  check("sheet is 16384 bytes", res.len === 16384);
+  check("sheet is 65536 bytes (full 256x256 page)", res.len === 65536);
   check(`red pixel -> nearest byte (${res.red}=${res.redExpect})`, res.red === res.redExpect && res.red !== 0);
   check(`green pixel -> nearest byte (${res.green}=${res.greenExpect})`, res.green === res.greenExpect && res.green !== 0);
   check(`blue pixel -> nearest byte (${res.blue}=${res.blueExpect})`, res.blue === res.blueExpect && res.blue !== 0);

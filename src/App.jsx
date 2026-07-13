@@ -15,7 +15,7 @@ import { loadExampleFiles } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
 import { downloadBytes, pickFile } from "./util/download.js";
 import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
-import { newSheet } from "./gfx/gtg.js";
+import { newSheet, splitSheet, joinSheet, QUAD_FILES } from "./gfx/gtg.js";
 import { FrameEditor } from "./gfx/FrameEditor.jsx";
 import { parseGsi, encodeGsi } from "./gfx/gsi.js";
 import { MusicEditor, newSong, songToBytes } from "./audio/MusicEditor.jsx";
@@ -94,8 +94,10 @@ export function App() {
     setCurrentId(rec.id);
     setProjectName(rec.name);
     setSource(asText(rec.files["main.lua"] ?? ""));
-    const g = rec.files["gfx.gtg"];
-    setSheet(g ? (g instanceof Uint8Array ? g : new Uint8Array(g)) : null);
+    // sprite sheet: stored as up to four 128x128 quadrant files (gfx.gtg +
+    // gfx_1/2/3.gtg, the C SDK layout); stitch them into one 256x256 buffer to
+    // edit. A project has a sheet if at least the base quadrant exists.
+    setSheet(rec.files["gfx.gtg"] ? joinSheet(rec.files) : null);
     const gsi = rec.files["gfx.gsi"];
     setFrames(gsi ? parseGsi(gsi instanceof Uint8Array ? gsi : new Uint8Array(gsi)) : null);
     const mus = rec.files["music.json"];
@@ -137,7 +139,20 @@ export function App() {
     window.__gtlua_test.getSource = () => source;
   }, [onChange, source]);
 
-  // sprite-sheet edits: immutable buffer in, debounced persist as gfx.gtg
+  // Write a 256x256 sheet into a project record as quadrant files: present
+  // quadrants (splitSheet omits empty NE/SW/SE) are written, and any quadrant
+  // file that's no longer present is deleted so a cleared quadrant doesn't linger
+  // in the ROM. Mutates rec.files in place; caller saves.
+  const writeSheetFiles = (rec, sheet) => {
+    const quads = splitSheet(sheet);
+    for (const name of QUAD_FILES) {
+      if (quads[name]) rec.files[name] = quads[name];
+      else delete rec.files[name];
+    }
+  };
+
+  // sprite-sheet edits: immutable 256x256 buffer in, debounced persist as the
+  // quadrant files.
   const onSheetChange = useCallback((buf) => {
     setSheet(buf);
     if (!currentId) return;
@@ -145,7 +160,7 @@ export function App() {
     sheetSaveTimer.current = setTimeout(async () => {
       const rec = await getProject(currentId);
       if (!rec) return;
-      rec.files["gfx.gtg"] = buf;
+      writeSheetFiles(rec, buf);
       await saveProject(rec, Date.now());
       refreshProjects();
     }, 500);
@@ -158,7 +173,7 @@ export function App() {
     if (!currentId) return;
     const rec = await getProject(currentId);
     if (!rec) return;
-    rec.files["gfx.gtg"] = buf;
+    writeSheetFiles(rec, buf);
     rec.files["gfx.gsi"] = encodeGsi(frameList);
     await saveProject(rec, Date.now());
     refreshProjects();
@@ -171,7 +186,7 @@ export function App() {
     if (!currentId) return;
     const rec = await getProject(currentId);
     if (!rec) return;
-    rec.files["gfx.gtg"] = buf;
+    writeSheetFiles(rec, buf);
     await saveProject(rec, Date.now());
     refreshProjects();
   }, [currentId, refreshProjects]);
@@ -226,15 +241,20 @@ export function App() {
   }, [currentId, refreshProjects]);
 
   // insert a hexdata(...) + song() snippet into main.lua so the tune plays
-  const insertSongSnippet = useCallback(() => {
+  // Copy the tracker song as a single `hexdata(...)` line to the clipboard. The
+  // SDK's only way to embed a composed song is a hexdata blob the game plays
+  // with song()/music_bank(); there is no build-side song input. Rather than
+  // splicing code into the file (which would collide with the user's _init), we
+  // hand over one line and let the user paste it where it belongs.
+  const [copiedSong, setCopiedSong] = useState(false);
+  const copySongLine = useCallback(async () => {
     if (!music) return;
     const hex = toHex(songToBytes(music));
-    const snippet =
-      `local tune = hexdata("${hex}")\n\n` +
-      `function _init()\n  song(tune)   -- loops; song(tune, false) to play once\nend\n\n`;
-    onChange(snippet + source);
-    setView("code");
-  }, [music, source, onChange]);
+    const line = `local tune = hexdata("${hex}")`;
+    try { await navigator.clipboard.writeText(line); } catch { /* clipboard blocked */ }
+    setCopiedSong(true);
+    setTimeout(() => setCopiedSong(false), 1500);
+  }, [music]);
 
   // --- project ops ---------------------------------------------------------
   const newProject = useCallback(async () => {
@@ -275,11 +295,14 @@ export function App() {
     const seq = ++buildSeq.current;
     setBuilding(true); setBuildErr(""); setBuildMsg("building...");
     try {
+      // sprite sheet -> the up-to-four 128x128 quadrant files the compiler
+      // stitches (gfx.gtg + gfx_1/2/3.gtg). splitSheet omits empty quadrants.
+      const quadrantBytes = sheet ? splitSheet(sheet) : undefined;
       const { gtr, ms } = await buildGtr(source, {
         // num8 (8.8 fixed) is a per-project numeric mode; default off to match
         // the CLI. A project toggle can set it later; forcing it on would change
         // fixed-point semantics for games that don't expect it.
-        sheetBytes: sheet ? sheet.buffer.slice(sheet.byteOffset, sheet.byteOffset + sheet.byteLength) : undefined,
+        quadrantBytes,
         framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
         onProgress: (m) => { if (seq === buildSeq.current) setBuildMsg(m); },
       });
@@ -416,8 +439,12 @@ export function App() {
             {view === "music" && (
               <div className="music-pane-wrap">
                 <div className="music-usebar">
-                  <button className="tb-btn" onClick={insertSongSnippet} title="insert hexdata + song() into main.lua">▸ use in game</button>
-                  <span className="music-usehint">adds a <code>hexdata(...)</code> + <code>song(tune)</code> to your code</span>
+                  <button className="tb-btn" onClick={copySongLine} title="copy this song as a hexdata(...) line to paste into your code">
+                    {copiedSong ? "✓ copied" : "⧉ copy hexdata line"}
+                  </button>
+                  <span className="music-usehint">
+                    paste it into your Lua, then play it: <code>song(tune)</code> in <code>_init()</code>
+                  </span>
                 </div>
                 <MusicEditor song={music} onChange={onMusicChange} />
               </div>

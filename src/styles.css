@@ -201,10 +201,24 @@ body {
 /* the canvas region scrolls on its own (both axes) when zoomed past the pane;
    the palette stays pinned beside it at a fixed width. */
 .sprite-canvas-wrap { flex: 1 1 auto; min-width: 0; padding: 16px; overflow: auto; }
+/* the sheet canvas + the guide overlay share one stacking box so the quadrant
+   borders / cell grid sit exactly on top of the pixels regardless of zoom. */
+.sprite-canvas-stack { position: relative; }
 .sprite-canvas {
   image-rendering: pixelated; cursor: crosshair;
   border: 1px solid var(--line); background: #000; display: block;
 }
+.sprite-overlay {
+  position: absolute; left: 0; top: 0; pointer-events: none;
+  image-rendering: pixelated;
+}
+.sprite-readout { margin-top: 8px; font: 11px var(--mono); color: var(--accent-2); }
+.sprite-readout .dim { color: var(--dim); }
+.sprite-toolbar .quad-sel select {
+  font: 11px var(--mono); background: #1a1d29; color: var(--fg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px;
+}
+.sprite-toolbar .grid-toggle { display: flex; align-items: center; gap: 4px; font: 11px var(--mono); color: var(--dim); }
 
 /* palette picker */
 .palette { flex: 0 0 224px; width: 224px; padding: 12px; border-left: 1px solid var(--line); overflow: auto; }

@@ -3,9 +3,9 @@
 // node:zlib is needed; we only do the RGBA -> GameTank-byte nearest-color match,
 // which is the SDK's nearestColorByte (verified: 185,197,65 -> byte 31).
 //
-// A .gtg is one 128x128 8bpp quadrant. A PNG larger than 128 in either axis is
-// cropped to the top-left 128x128 for v1 (256x256 multi-quadrant is deferred,
-// matching the sprite editor's single-quadrant scope). Fully/mostly transparent
+// The sheet is the full 256x256 GameTank GRAM page; a PNG larger than 256 in
+// either axis is cropped to the top-left 256x256. (The page is split into four
+// 128x128 quadrant .gtg files at save/build time.) Fully/mostly transparent
 // pixels (alpha < cutoff) become byte 0 (transparent).
 import { nearestColorByte } from "./palette.js";
 import { SHEET_DIM, newSheet } from "./gtg.js";
@@ -31,16 +31,17 @@ export function decodePngToRgba(bytes) {
 }
 
 /**
- * PNG bytes -> a 128x128 .gtg sheet (Uint8Array(16384)). Each opaque pixel is
- * matched to the nearest of GameTank's 256 colors; transparent pixels -> byte 0.
- * Larger images are cropped to the top-left 128x128.
+ * PNG bytes -> a 256x256 sheet (Uint8Array(65536)). Each opaque pixel is matched
+ * to the nearest of GameTank's 256 colors; transparent pixels -> byte 0. Larger
+ * images are cropped to the top-left 256x256.
  * @param {Uint8Array} pngBytes
  * @param {{alphaCutoff?: number}} [opts]
  */
 /**
- * RGBA image -> a 128x128 .gtg sheet via nearest-color. Shared by PNG and
- * Aseprite import. Transparent pixels (alpha < cutoff) -> byte 0. Cropped to
- * the top-left 128x128.
+ * RGBA image -> a 256x256 sheet (the full GameTank GRAM page) via nearest-color.
+ * Shared by PNG and Aseprite import. Transparent pixels (alpha < cutoff) -> byte
+ * 0. Cropped to the top-left 256x256; the sheet is later split into 128x128
+ * quadrant .gtg files at save/build time.
  */
 export function rgbaToSheet({ width, height, rgba }, { alphaCutoff = 128 } = {}) {
   const sheet = newSheet();
