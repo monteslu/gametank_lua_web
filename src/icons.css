@@ -39,3 +39,8 @@
 .ti-photo::before { content: "\eb0a"; }         /* import image */
 .ti-file-import::before { content: "\edea"; }
 .ti-file-export::before { content: "\ede9"; }
+
+/* emulator transport */
+.ti-player-play::before { content: "\ed46"; }
+.ti-player-stop::before { content: "\ed4a"; }
+.ti-refresh::before { content: "\eb13"; }       /* restart */

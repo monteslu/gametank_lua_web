@@ -142,11 +142,27 @@ export class GameTankHost {
     this.running = false;
     if (this._rafId) cancelAnimationFrame(this._rafId);
     this._rafId = 0;
+    // silence + freeze audio: suspend the context so no queued buffer keeps
+    // playing, and reset the schedule cursor so resume() doesn't try to schedule
+    // in the past (which would burst-play a backlog).
+    if (this._audioCtx && this._audioCtx.state === "running") {
+      try { this._audioCtx.suspend(); } catch { /* ignore */ }
+    }
+    if (this._audioQueue) this._audioQueue.length = 0;
   }
 
   resume() {
-    if (!this.running && this.mod) { this.running = true; this._loop(); }
+    if (this.running || !this.mod) return;
+    this.running = true;
+    if (this._audioCtx) {
+      try { this._audioCtx.resume(); } catch { /* ignore */ }
+      this._nextAudioTime = this._audioCtx.currentTime;
+    }
+    this._loop();
   }
+
+  /** True while the loop is stopped (paused) but the cart is still loaded. */
+  isPaused() { return !this.running && !!this.mod; }
 
   /** Hardware reset (re-runs the cart from the reset vector). */
   reset() { if (this.mod) this.mod._retro_reset(); }

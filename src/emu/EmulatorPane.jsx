@@ -18,6 +18,7 @@ export function EmulatorPane({ rom, onHost }) {
   const hostRef = useRef(null);
   const [status, setStatus] = useState("idle");   // idle | loading | running | error
   const [error, setError] = useState("");
+  const [paused, setPaused] = useState(false);     // loop stopped but cart still loaded
 
   useEffect(() => {
     if (!rom) return;
@@ -33,6 +34,7 @@ export function EmulatorPane({ rom, onHost }) {
       hostRef.current = host;
       host.start(canvasRef.current);
       setStatus("running");
+      setPaused(false);   // a fresh build always runs
       onHost?.(host);
     }).catch((e) => {
       if (cancelled) return;
@@ -84,6 +86,23 @@ export function EmulatorPane({ rom, onHost }) {
     else if (req) req.call(el);
   };
 
+  // stop = freeze the loop (pause); resume = un-freeze. Toggled by one button.
+  const togglePause = () => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (host.isPaused()) { host.resume(); setPaused(false); }
+    else { host.pause(); setPaused(true); }
+  };
+
+  // restart = re-run the cart from its reset vector. If paused, un-freeze first
+  // so the restart is actually visible/running.
+  const restart = () => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (host.isPaused()) { host.resume(); setPaused(false); }
+    host.reset();
+  };
+
   return (
     <div className="emu">
       <div className="pane-title emu-titlebar">
@@ -112,9 +131,24 @@ export function EmulatorPane({ rom, onHost }) {
         )}
       </div>
       <div className="emu-controls">
-        <button onClick={() => hostRef.current?.reset()} disabled={status !== "running"}>reset</button>
+        <button
+          className="emu-btn tip"
+          onClick={togglePause}
+          disabled={status !== "running"}
+          data-tip={paused ? "Resume" : "Stop (freeze)"}
+          aria-label={paused ? "resume" : "stop"}
+        ><i className={"ti " + (paused ? "ti-player-play" : "ti-player-stop")} /></button>
+        <button
+          className="emu-btn tip"
+          onClick={restart}
+          disabled={status !== "running"}
+          data-tip="Restart (reset the cart)"
+          aria-label="restart"
+        ><i className="ti ti-refresh" /></button>
         <span className="emu-hint">
-          {focused ? "arrows move · Z/X/C = A/B/C · Enter = start" : "click the screen to use the controls"}
+          {status === "running" && paused ? "stopped · press ▶ to resume"
+            : focused ? "arrows move · Z/X/C = A/B/C · Enter = start"
+            : "click the screen to use the controls"}
         </span>
       </div>
     </div>

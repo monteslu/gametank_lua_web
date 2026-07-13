@@ -480,13 +480,16 @@ body {
 .emu-overlay.error { color: var(--err); }
 .emu-overlay .err { color: var(--err); }
 .emu-controls {
-  display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   border-top: 1px solid var(--line); background: var(--panel);
 }
-.emu-controls button {
-  font: 700 12px system-ui, sans-serif; color: var(--fg); background: var(--panel-2);
-  border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; cursor: pointer;
+/* icon transport buttons (stop/resume, restart) */
+.emu-controls .emu-btn {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 7px; padding: 0; cursor: pointer;
 }
-.emu-controls button:hover:not(:disabled) { border-color: var(--accent-2); color: #fff; }
-.emu-controls button:disabled { opacity: 0.4; cursor: default; }
-.emu-hint { font: 11px var(--mono); color: var(--dim); }
+.emu-controls .emu-btn .ti { font-size: 17px; line-height: 1; }
+.emu-controls .emu-btn:hover:not(:disabled) { border-color: var(--accent-2); color: #fff; }
+.emu-controls .emu-btn:disabled { opacity: 0.4; cursor: default; }
+.emu-hint { font: 11px var(--mono); color: var(--dim); margin-left: 4px; }
