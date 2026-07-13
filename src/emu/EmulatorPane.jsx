@@ -87,7 +87,7 @@ export function EmulatorPane({ rom, onHost }) {
     <div className="emu">
       <div className="pane-title emu-titlebar">
         <span>emulator</span>
-        <button className="emu-fs" onClick={goFullscreen} title="fullscreen (also grabs the controls)" aria-label="fullscreen">⛶</button>
+        <button className="emu-fs tip" onClick={goFullscreen} data-tip="Fullscreen (grabs the controls)" aria-label="fullscreen">⛶</button>
       </div>
       <div
         className={"emu-screen" + (focused ? " focused" : "")}

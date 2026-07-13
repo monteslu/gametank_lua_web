@@ -354,6 +354,21 @@ body {
 }
 .emu-fs:hover { color: var(--accent-2); }
 
+/* instant, themed tooltip (the native title attr is slow + unstyled). Put
+   data-tip on any element with class .tip. */
+.tip { position: relative; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute; top: 100%; right: 0; margin-top: 6px;
+  white-space: nowrap; z-index: 200; pointer-events: none;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 4px 8px; font: 11px/1.2 system-ui, sans-serif; font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  opacity: 0; transform: translateY(-2px); transition: opacity 0.08s ease, transform 0.08s ease;
+}
+.tip:hover::after, .tip:focus-visible::after { opacity: 1; transform: translateY(0); }
+
 .emu-screen {
   flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
   min-height: 0; padding: 12px; overflow: hidden; outline: none; cursor: pointer;
