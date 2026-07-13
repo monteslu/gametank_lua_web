@@ -74,6 +74,62 @@ function cellAt(x, y) {
   return (y >> 3) * 16 + (x >> 3);
 }
 const QUAD_NAME = ["NW (spr grid)", "NE", "SW", "SE"];
+const QUAD_FILE = ["gfx.gtg", "gfx_1.gtg", "gfx_2.gtg", "gfx_3.gtg"];
+
+/**
+ * Quadrant picker for .gtg import/export: the four 128x128 quadrants of the
+ * sheet, drawn live, each a button. Import = "which quadrant does the file
+ * land in"; export = "which quadrant becomes the file".
+ */
+function QuadPickModal({ mode, sheet, onPick, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const drawQuad = (canvas, q) => {
+    if (!canvas || !sheet) return;
+    const ctx = canvas.getContext("2d");
+    const img = ctx.createImageData(QUAD_DIM, QUAD_DIM);
+    const ox = (q & 1) * QUAD_DIM, oy = (q >> 1) * QUAD_DIM;
+    for (let y = 0; y < QUAD_DIM; y++) {
+      for (let x = 0; x < QUAD_DIM; x++) {
+        const byte = sheet[(oy + y) * SHEET_DIM + ox + x];
+        const o = (y * QUAD_DIM + x) * 4;
+        if (byte === TRANSPARENT) {
+          const c = ((x >> 2) + (y >> 2)) & 1 ? 44 : 32;
+          img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c + 4; img.data[o + 3] = 255;
+        } else {
+          const [r, g, b] = byteToRgb(byte);
+          img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+  return (
+    <div className="flash-modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="quadpick-box">
+        <div className="newproj-head">
+          <span className="newproj-title">{mode === "import" ? "Import .gtg" : "Export .gtg"}</span>
+          <span className="newproj-sub">
+            {mode === "import" ? "pick the quadrant the file lands in" : "pick the quadrant to save as a file"}
+          </span>
+          <button className="newproj-close" onClick={onClose} aria-label="close">×</button>
+        </div>
+        <div className="quadpick-grid">
+          {QUAD_NAME.map((n, q) => (
+            <button className="quadpick-card" key={q} onClick={() => onPick(q)}>
+              <canvas width={QUAD_DIM} height={QUAD_DIM} ref={(c) => drawQuad(c, q)} />
+              <span className="quadpick-name">{QUAD_FILE[q]}</span>
+              <span className="quadpick-pos">{n}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function quadAt(x, y) {
   return (x >= QUAD_DIM ? 1 : 0) + (y >= QUAD_DIM ? 2 : 0);
 }
@@ -407,10 +463,11 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
 
   // raw .gtg import/export - the exact 128x128 quadrant file a C-SDK build
   // consumes (gfx.gtg / gfx_1 / _2 / _3), so assets round-trip between our editor
-  // and a C GameTank project. A .gtg is ONE quadrant; import drops it into the
-  // chosen quadrant, export emits the chosen quadrant.
-  const [quad, setQuad] = useState(0);   // which 128x128 quadrant .gtg I/O targets
-  const importGtg = useCallback(async () => {
+  // and a C GameTank project. A .gtg is ONE quadrant; clicking import/export
+  // opens a picker modal showing all four quadrants live - choose one there.
+  const [quadModal, setQuadModal] = useState(null);   // "import" | "export" | null
+  const importGtg = useCallback(async (quad) => {
+    setQuadModal(null);
     const picked = await pickFile(".gtg");
     if (!picked) return;
     try {
@@ -421,11 +478,11 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
       onChange(buf);
       flash(`imported .gtg into ${QUAD_NAME[quad].split(" ")[0]}`);
     } catch (e) { flash(`import failed: ${e.message}`); }
-  }, [onChange, sheet, quad, snapshot]);
-  const exportGtg = useCallback(() => {
-    const names = ["gfx.gtg", "gfx_1.gtg", "gfx_2.gtg", "gfx_3.gtg"];
-    downloadBytes(names[quad], quadrantOf(sheet, quad), "application/octet-stream");
-  }, [sheet, quad]);
+  }, [onChange, sheet, snapshot]);
+  const exportGtg = useCallback((quad) => {
+    setQuadModal(null);
+    downloadBytes(QUAD_FILE[quad], quadrantOf(sheet, quad), "application/octet-stream");
+  }, [sheet]);
 
   return (
     <div className="sprite-editor" ref={rootRef}>
@@ -457,13 +514,8 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
         <button className="tool icon import tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
-        <label className="quad-sel" title="which 128x128 quadrant .gtg import/export targets (gfx.gtg / gfx_1 / _2 / _3)">
-          <select value={quad} onChange={(e) => setQuad(+e.target.value)}>
-            {QUAD_NAME.map((n, i) => <option key={i} value={i}>{["gfx.gtg", "gfx_1", "gfx_2", "gfx_3"][i]} · {n}</option>)}
-          </select>
-        </label>
-        <button className="tool icon tip" onClick={importGtg} data-tip="Import a .gtg quadrant into the selected quadrant" aria-label="import .gtg"><i className="ti ti-file-import" /></button>
-        <button className="tool icon tip" onClick={exportGtg} data-tip="Export the selected quadrant as a .gtg" aria-label="export .gtg"><i className="ti ti-file-export" /></button>
+        <button className="tool icon tip" onClick={() => setQuadModal("import")} data-tip="Import a .gtg quadrant file (picks the target quadrant next)" aria-label="import .gtg"><i className="ti ti-file-import" /></button>
+        <button className="tool icon tip" onClick={() => setQuadModal("export")} data-tip="Export a quadrant as a .gtg file (picks the quadrant next)" aria-label="export .gtg"><i className="ti ti-file-export" /></button>
         <label className="grid-toggle" title="show the 8x8 cell grid (NW) + quadrant borders">
           <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> grid
         </label>
@@ -472,6 +524,15 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
           {zoom}x
         </label>
       </div>
+
+      {quadModal && (
+        <QuadPickModal
+          mode={quadModal}
+          sheet={sheet}
+          onPick={(q) => (quadModal === "import" ? importGtg(q) : exportGtg(q))}
+          onClose={() => setQuadModal(null)}
+        />
+      )}
 
       <div className="sprite-body">
         <div className="sprite-canvas-wrap">

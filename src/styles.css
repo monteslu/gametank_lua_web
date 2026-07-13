@@ -671,3 +671,21 @@ body {
 .confirm-cancel:hover { border-color: var(--accent-2); }
 .confirm-danger { color: #fff; background: #b83a4e; border: 0; }
 .confirm-danger:hover { filter: brightness(1.15); }
+
+/* .gtg quadrant picker (import/export) */
+.quadpick-box {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden;
+}
+.quadpick-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 16px 20px 20px;
+}
+.quadpick-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px; background: #12151c; border: 1px solid var(--line);
+  border-radius: 12px; cursor: pointer;
+}
+.quadpick-card:hover { border-color: var(--accent-2); }
+.quadpick-card canvas { width: 128px; height: 128px; image-rendering: pixelated; border-radius: 6px; }
+.quadpick-name { font: 700 12px var(--mono); color: var(--fg); }
+.quadpick-pos { font: 11px system-ui, sans-serif; color: var(--dim); }
