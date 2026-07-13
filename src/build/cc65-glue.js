@@ -200,7 +200,7 @@ export function runWasmTool(wasmModule, { fs, argv, print, printErr }) {
         const base = HEAPU32[(iovPtr >> 2) + i * 2];
         const len = HEAPU32[(iovPtr >> 2) + i * 2 + 1];
         if (len === 0) continue;                       // empty iovec slot - skip, don't stop
-        const avail = Math.min(len, f.data.length - f.pos);
+        const avail = Math.min(len, f.len - f.pos);
         if (avail <= 0) break;                          // genuine EOF - stop
         HEAPU8.set(f.data.subarray(f.pos, f.pos + avail), base);
         f.pos += avail; read += avail;
@@ -209,7 +209,13 @@ export function runWasmTool(wasmModule, { fs, argv, print, printErr }) {
       HEAPU32[pRead >> 2] = read;
       return 0;
     },
-    fd_close: (fd) => { openFiles.delete(fd); return 0; },
+    fd_close: (fd) => {
+      const f = openFiles.get(fd);
+      // commit the final, right-sized output to the VFS (written lazily, not per-write)
+      if (f && f.dirty) fs.set(f.path, f.data.subarray(0, f.len).slice());
+      openFiles.delete(fd);
+      return 0;
+    },
     // WASI fd_seek(fd, offset:i64, whence, newOffset). The offset is a single
     // 64-bit value delivered as a BigInt (NOT a lo/hi i32 pair - getting the
     // signature wrong shifts whence/newOffset and yields EOVERFLOW on write).
@@ -219,7 +225,7 @@ export function runWasmTool(wasmModule, { fs, argv, print, printErr }) {
       const off = typeof offset === "bigint" ? Number(offset) : offset;
       if (whence === 0) f.pos = off;                        // SEEK_SET
       else if (whence === 1) f.pos += off;                  // SEEK_CUR
-      else if (whence === 2) f.pos = f.data.length + off;   // SEEK_END
+      else if (whence === 2) f.pos = f.len + off;   // SEEK_END
       // newOffset is a 64-bit result; write it as i64 (lo, hi).
       HEAPU32[pNewOff >> 2] = f.pos >>> 0;
       HEAPU32[(pNewOff >> 2) + 1] = 0;
@@ -261,15 +267,26 @@ export function runWasmTool(wasmModule, { fs, argv, print, printErr }) {
     },
   };
 
+  // Append with AMORTIZED growth. The old version reallocated + copied the whole
+  // file on every write, which is O(n^2) when a tool (ld65!) emits its output in
+  // many small chunks - the dominant cost of a build. Here f.data is a capacity
+  // buffer that doubles when full; f.len is the logical size. We commit a
+  // right-sized view to the VFS only at close (see fd_close), not per write.
   function appendToFile(fd, chunk) {
     const f = openFiles.get(fd);
     if (!f) return;
-    // grow the file's backing array and commit to the VFS
-    const grown = new Uint8Array(Math.max(f.data.length, f.pos + chunk.length));
-    grown.set(f.data);
-    grown.set(chunk, f.pos);
-    f.data = grown; f.pos += chunk.length; f.len = grown.length;
-    fs.set(f.path, grown);
+    const need = f.pos + chunk.length;
+    if (need > f.data.length) {
+      let cap = Math.max(f.data.length * 2, 64);
+      while (cap < need) cap *= 2;
+      const grown = new Uint8Array(cap);
+      grown.set(f.data.subarray(0, f.len));
+      f.data = grown;
+    }
+    f.data.set(chunk, f.pos);
+    f.pos += chunk.length;
+    if (f.pos > f.len) f.len = f.pos;
+    f.dirty = true;
   }
 
   // ---- instantiate (SYNC - the module is already compiled) ----------------
