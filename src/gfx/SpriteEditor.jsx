@@ -176,13 +176,16 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     return { x, y };
   }, [zoom]);
 
-  // flood fill from (x,y) over the contiguous region of the same byte
-  const floodFill = (buf, x, y, target, replace) => {
+  // flood fill from (x,y) over the contiguous region of the same byte.
+  // With a selection active, the marquee is the fill's fence: nothing outside
+  // it is read or painted.
+  const floodFill = (buf, x, y, target, replace, bounds) => {
     if (target === replace) return;
+    const b = bounds ?? { x0: 0, y0: 0, x1: SHEET_DIM - 1, y1: SHEET_DIM - 1 };
     const stack = [[x, y]];
     while (stack.length) {
       const [cx, cy] = stack.pop();
-      if (cx < 0 || cy < 0 || cx >= SHEET_DIM || cy >= SHEET_DIM) continue;
+      if (cx < b.x0 || cy < b.y0 || cx > b.x1 || cy > b.y1) continue;
       if (getPixel(buf, cx, cy) !== target) continue;
       setPixel(buf, cx, cy, replace);
       stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
@@ -303,7 +306,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
       drawing.current = { tool, paint, last: p, buf };
       commit(buf);
     } else if (tool === "fill") {
-      floodFill(buf, p.x, p.y, getPixel(buf, p.x, p.y), paint);
+      floodFill(buf, p.x, p.y, getPixel(buf, p.x, p.y), paint, sel ?? undefined);
       commit(buf);
     } else if (tool === "line" || tool === "rect") {
       // preview drag: keep the pristine base, redraw shape each move

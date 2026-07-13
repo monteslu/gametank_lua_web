@@ -544,7 +544,11 @@ export function App() {
     <div className="ide">
       <header className="topbar">
         <span className="logo">gt-lua <span className="dim">web</span></span>
-        <input className="proj-name" value={projectName} onChange={(e) => rename(e.target.value)} title="project name" placeholder="no project" disabled={!currentId} />
+        <label className="proj-name-wrap tip" data-tip="project name - click to rename">
+          <i className="ti ti-pencil" aria-hidden="true" />
+          <input className="proj-name" value={projectName} onChange={(e) => rename(e.target.value)}
+            aria-label="project name" placeholder="no project" disabled={!currentId} />
+        </label>
         <button className="play" onClick={play} disabled={!warm || !currentId || building || errors.length > 0}
           title={warm ? "build & run (Ctrl-R)" : "warming up the build tools..."}>
           {building ? "building..." : warm ? "▶ Play" : "warming up..."}
