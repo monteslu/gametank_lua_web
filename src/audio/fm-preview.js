@@ -110,48 +110,10 @@ export class FmPreview {
     }
   }
 
-  play(song, { fps = 60, loop = false } = {}) {
-    this.stop();
-    const ctx = this.ensure();
-    this.playing = true;
-    const instr = song.instruments.map((x) => (typeof x === "number" ? x : 0));
-    const events = song.events || [];
-    // walk events accumulating frame time -> seconds
-    let frame = 0;
-    const t0 = ctx.currentTime + 0.05;
-    const held = {};   // ch -> { stopFrame } to compute note durations
-    events.forEach((ev, i) => {
-      frame += ev.delay | 0;
-      const t = t0 + frame / fps;
-      // schedule a UI callback at this event
-      const id = setTimeout(() => { if (this.playing) this.onFrame?.(i); }, (frame / fps) * 1000);
-      this.timers.push(id);
-      if (!ev.notes) return;
-      for (let ch = 0; ch < 4; ch++) {
-        const n = ev.notes[ch];
-        if (n === undefined || n === null) continue;
-        const note = typeof n === "object" ? n.note : n;
-        const vel = typeof n === "object" ? (n.vel ?? 63) : 63;
-        // duration: until this channel's next event, min 6 frames
-        let dur = 12;
-        for (let j = i + 1; j < events.length; j++) {
-          const nn = events[j].notes && events[j].notes[ch];
-          const acc = events.slice(i + 1, j + 1).reduce((s, e) => s + (e.delay | 0), 0);
-          if (nn !== undefined && nn !== null) { dur = Math.max(6, acc); break; }
-        }
-        if (note) this.voice(instr[ch], noteToFreq(note), t, dur / fps, vel);
-      }
-    });
-    // total length
-    const total = events.reduce((s, e) => s + (e.delay | 0), 0);
-    const endMs = (total / fps) * 1000 + 400;
-    const endId = setTimeout(() => {
-      if (!this.playing) return;
-      if (loop) this.play(song, { fps, loop });
-      else { this.playing = false; this.onFrame?.(-1); }
-    }, endMs);
-    this.timers.push(endId);
-  }
+  // (The old whole-song scheduler play() was removed - playback is now a live
+  // step-clock in MusicEditor that calls playStep() per step. That scheduler had
+  // an O(n^3) duration scan - events x channels x slice().reduce() - so dropping
+  // it also removes a hotspot.)
 
   stop() {
     this.playing = false;
