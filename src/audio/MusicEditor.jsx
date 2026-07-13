@@ -3,6 +3,7 @@ import { INSTRUMENT_LIST, encodeGtm2, noteNum, gtm2ToModel } from "./gtm2.js";
 import { FmPreview } from "./fm-preview.js";
 import { midiToSong } from "./midi-import.js";
 import { pickFile, downloadBytes } from "../util/download.js";
+import { Piano } from "./Piano.jsx";
 
 const CHANNELS = 4;
 // note names for the picker, C2..C6 (a comfortable tracker range). Value is
@@ -39,6 +40,11 @@ export function MusicEditor({ song, onChange }) {
     grid[step][ch] = note;
     onChange({ ...model, grid });
   };
+
+  // hear a note when you pick it on the piano (uses channel 0's instrument)
+  const previewNote = useCallback((midi) => {
+    if (!playing) preview.current?.playNote(model.instruments[0] ?? 0, midi);
+  }, [playing, model.instruments]);
   const setInstrument = (ch, index) => {
     const instruments = model.instruments.slice();
     instruments[ch] = index;
@@ -145,11 +151,12 @@ export function MusicEditor({ song, onChange }) {
         <button className="tool import" onClick={importMidi} title="import a MIDI file (re-interpreted as 4-channel FM)">import MIDI</button>
         <button className="tool" onClick={importGtm2} title="import a raw .gtm2 song (e.g. from a C project)">.gtm2 ▾</button>
         <button className="tool" onClick={exportGtm2} title="export the song as a raw .gtm2 (for a C project)">.gtm2 ▴</button>
-        <label className="m-field">note
-          <select value={pitch} onChange={(e) => setPitch(+e.target.value)}>
-            {NOTE_NAMES.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-          </select>
-        </label>
+      </div>
+
+      {/* piano note picker - the note placed when you click a grid cell */}
+      <div className="music-piano-bar">
+        <span className="mpb-label">note <b>{nameOf(pitch)}</b></span>
+        <Piano value={pitch} onChange={setPitch} onPreview={previewNote} />
       </div>
 
       {/* channel headers with instrument pickers */}

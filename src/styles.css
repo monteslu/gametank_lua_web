@@ -283,6 +283,31 @@ body {
 .music-usehint code { color: var(--accent-2); }
 .music-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: auto; }
 .music-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+
+/* piano note picker */
+.music-piano-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.mpb-label { font: 12px var(--mono); color: var(--dim); white-space: nowrap; }
+.mpb-label b { color: var(--sun); }
+.piano { flex: 1; min-width: 0; }
+.piano-keys { position: relative; display: flex; height: 68px; max-width: 620px; user-select: none; }
+.pk-white {
+  flex: 1; min-width: 0; margin: 0; padding: 0; cursor: pointer;
+  background: linear-gradient(180deg, #f4f0fb, #d9d2ea); border: 1px solid #2a2440;
+  border-radius: 0 0 4px 4px; display: flex; align-items: flex-end; justify-content: center;
+}
+.pk-white + .pk-white { border-left: 0; }
+.pk-white:hover { background: linear-gradient(180deg, #fff, #e9e3f6); }
+.pk-white.sel { background: linear-gradient(180deg, #ffd0ec, var(--accent)); }
+.pk-white .pk-label { font: 8px var(--mono); color: #6b6486; padding-bottom: 3px; pointer-events: none; }
+.pk-white.sel .pk-label { color: #2a0b1e; font-weight: 700; }
+.pk-black {
+  position: absolute; top: 0; width: calc((100% / var(--n-white)) * 0.64); height: 62%;
+  margin-left: 0; transform: translateX(-50%);
+  background: linear-gradient(180deg, #3a3450, #17141f); border: 1px solid #000;
+  border-radius: 0 0 3px 3px; cursor: pointer; z-index: 2;
+}
+.pk-black:hover { background: linear-gradient(180deg, #4a4468, #221d33); }
+.pk-black.sel { background: linear-gradient(180deg, var(--accent), #8a2f68); }
 .m-play { font: 800 13px system-ui, sans-serif; color: #2a0b1e; background: linear-gradient(180deg, #ffa3d6, var(--accent)); border: 0; border-radius: 999px; padding: 7px 16px; cursor: pointer; }
 .m-play.on { background: linear-gradient(180deg, #8ff0f2, var(--accent-2)); color: #06121a; }
 .m-field { display: flex; align-items: center; gap: 6px; font: 12px system-ui, sans-serif; color: var(--dim); }

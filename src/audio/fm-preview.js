@@ -88,6 +88,12 @@ export class FmPreview {
     carrier.start(t); carrier.stop(rel + p.r + 0.05);
   }
 
+  // Play a single note now (for the piano key-press preview). midi is 1-based.
+  playNote(instr, midi, durSec = 0.35) {
+    const ctx = this.ensure();
+    this.voice(instr | 0, noteToFreq(midi), ctx.currentTime + 0.01, durSec);
+  }
+
   play(song, { fps = 60, loop = false } = {}) {
     this.stop();
     const ctx = this.ensure();
