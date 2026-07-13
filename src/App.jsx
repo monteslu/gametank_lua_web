@@ -14,6 +14,8 @@ import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
 import { newSheet } from "./gfx/gtg.js";
 import { FrameEditor } from "./gfx/FrameEditor.jsx";
 import { parseGsi, encodeGsi } from "./gfx/gsi.js";
+import { MusicEditor, newSong, songToBytes } from "./audio/MusicEditor.jsx";
+import { toHex } from "./audio/gtm2.js";
 
 const HELLO = `-- hello: a complete GameTank game. No assets, just code.
 function _draw()
@@ -43,7 +45,8 @@ export function App() {
   const [projectName, setProjectName] = useState("hello");
   const [sheet, setSheet] = useState(null);      // Uint8Array(16384) or null (no gfx.gtg)
   const [frames, setFrames] = useState(null);    // array of {vxo,vyo,w,h,gx,gy} or null
-  const [view, setView] = useState("code");      // "code" | "sprite" | "frames"
+  const [music, setMusic] = useState(null);      // tracker grid model or null (music.json)
+  const [view, setView] = useState("code");      // "code" | "sprite" | "frames" | "music"
 
   const [rom, setRom] = useState(null);
   const [building, setBuilding] = useState(false);
@@ -53,6 +56,7 @@ export function App() {
   const saveTimer = useRef(0);
   const sheetSaveTimer = useRef(0);
   const framesSaveTimer = useRef(0);
+  const musicSaveTimer = useRef(0);
 
   // --- projects list + initial project ------------------------------------
   const refreshProjects = useCallback(async () => {
@@ -86,6 +90,8 @@ export function App() {
     setSheet(g ? (g instanceof Uint8Array ? g : new Uint8Array(g)) : null);
     const gsi = rec.files["gfx.gsi"];
     setFrames(gsi ? parseGsi(gsi instanceof Uint8Array ? gsi : new Uint8Array(gsi)) : null);
+    const mus = rec.files["music.json"];
+    setMusic(mus ? JSON.parse(asText(mus)) : null);
     setView("code");
     setRom(null); setBuildMsg(""); setBuildErr("");
   }, []);
@@ -172,6 +178,42 @@ export function App() {
     await saveProject(rec, Date.now());
     refreshProjects();
   }, [currentId, refreshProjects]);
+
+  // music (tracker grid model persisted as music.json)
+  const onMusicChange = useCallback((m) => {
+    setMusic(m);
+    if (!currentId) return;
+    clearTimeout(musicSaveTimer.current);
+    musicSaveTimer.current = setTimeout(async () => {
+      const rec = await getProject(currentId);
+      if (!rec) return;
+      rec.files["music.json"] = JSON.stringify(m);
+      await saveProject(rec, Date.now());
+      refreshProjects();
+    }, 500);
+  }, [currentId, refreshProjects]);
+
+  const addMusic = useCallback(async () => {
+    const m = newSong();
+    setMusic(m); setView("music");
+    if (!currentId) return;
+    const rec = await getProject(currentId);
+    if (!rec) return;
+    rec.files["music.json"] = JSON.stringify(m);
+    await saveProject(rec, Date.now());
+    refreshProjects();
+  }, [currentId, refreshProjects]);
+
+  // insert a hexdata(...) + song() snippet into main.lua so the tune plays
+  const insertSongSnippet = useCallback(() => {
+    if (!music) return;
+    const hex = toHex(songToBytes(music));
+    const snippet =
+      `local tune = hexdata("${hex}")\n\n` +
+      `function _init()\n  song(tune)   -- loops; song(tune, false) to play once\nend\n\n`;
+    onChange(snippet + source);
+    setView("code");
+  }, [music, source, onChange]);
 
   // --- project ops ---------------------------------------------------------
   const newProject = useCallback(async () => {
@@ -313,6 +355,9 @@ export function App() {
               {frames
                 ? <button className={"tab " + (view === "frames" ? "sel" : "")} onClick={() => setView("frames")}>gfx.gsi</button>
                 : sheet && <button className="tab add" onClick={addFrames} title="add a frame table (sprf animation)">+ frames</button>}
+              {music
+                ? <button className={"tab " + (view === "music" ? "sel" : "")} onClick={() => setView("music")}>music</button>
+                : <button className="tab add" onClick={addMusic} title="add a music track (FM tracker)">+ music</button>}
             </div>
             {view === "code" && (
               <Suspense fallback={<div className="editor-loading">loading editor…</div>}>
@@ -321,6 +366,15 @@ export function App() {
             )}
             {view === "sprite" && <SpriteEditor sheet={sheet} onChange={onSheetChange} />}
             {view === "frames" && <FrameEditor sheet={sheet} frames={frames || []} onChange={onFramesChange} />}
+            {view === "music" && (
+              <div className="music-pane-wrap">
+                <div className="music-usebar">
+                  <button className="tb-btn" onClick={insertSongSnippet} title="insert hexdata + song() into main.lua">▸ use in game</button>
+                  <span className="music-usehint">adds a <code>hexdata(...)</code> + <code>song(tune)</code> to your code</span>
+                </div>
+                <MusicEditor song={music} onChange={onMusicChange} />
+              </div>
+            )}
           </section>
 
           <section className="pane emu-pane">
