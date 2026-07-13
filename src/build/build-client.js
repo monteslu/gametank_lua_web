@@ -72,3 +72,13 @@ export function buildGtr(source, opts = {}) {
     w.postMessage({ type: "build", id, source, opts: rest });
   });
 }
+
+/**
+ * Seed a known-good FLASH2M placement (a CLI build/.placement.json) for a
+ * project, so its first-ever build links in one pass instead of running the
+ * bank-placement search. Fire-and-forget; the worker ignores it if it already
+ * has a layout for that project.
+ */
+export function seedReplay(projectKey, bytes) {
+  ensureWorker().postMessage({ type: "seedReplay", projectKey, bytes });
+}

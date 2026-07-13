@@ -145,6 +145,15 @@ for (const ex of EX_LIST) {
       files.push(asset);
     }
   }
+  // big FLASH2M ports: stage the CLI's winning bank layout as placement.json.
+  // NOT in `files` (it must never fork into the project); the IDE fetches it at
+  // fork time to seed the build worker's replay cache, so the fork's first
+  // build links in one pass instead of running the ~10s placement search.
+  // Self-validating downstream (function-set check + link proof), so a stale
+  // layout only ever costs one extra pass.
+  if (existsSync(path.join(dir, "build", ".placement.json"))) {
+    await cp(path.join(dir, "build", ".placement.json"), path.join(EX_OUT, ex.name, "placement.json"));
+  }
   const entry = { name: ex.name, blurb: ex.blurb, files };
   if (ex.num8) entry.num8 = true;
   if (ex.license) entry.license = ex.license;

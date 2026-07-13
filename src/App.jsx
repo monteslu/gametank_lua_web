@@ -6,13 +6,13 @@ const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m
 // cheatsheet pulls in marked; lazy-load it too so it's not in the main bundle
 const Cheatsheet = React.lazy(() => import("./Cheatsheet.jsx").then((m) => ({ default: m.Cheatsheet })));
 const ProjectSettings = React.lazy(() => import("./ProjectSettings.jsx").then((m) => ({ default: m.ProjectSettings })));
-import { buildGtr, prewarm } from "./build/build-client.js";
+import { buildGtr, prewarm, seedReplay } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
 import { WebSerialFlasher, webSerialAvailable } from "./flash/web-serial-flasher.js";
 import { Sidebar } from "./projects/Sidebar.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
-import { loadExampleFiles } from "./projects/examples.js";
+import { loadExampleFiles, loadExamplePlacement } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
 import { readManifest, writeManifest, ensureManifest, defaultManifest } from "./projects/manifest.js";
 import { downloadBytes, pickFile } from "./util/download.js";
@@ -67,6 +67,7 @@ export function App() {
   const [bottomTab, setBottomTab] = useState("problems");   // "problems" | "ram"
   const [flash, setFlash] = useState(null);        // { log:[], done, total, label, error, running } while flashing
   const [building, setBuilding] = useState(false);
+  const [warm, setWarm] = useState(false);       // build worker prewarmed (tools compiled + toolchain fetched)
   const [buildMsg, setBuildMsg] = useState("");
   const [buildErr, setBuildErr] = useState("");
   const buildSeq = useRef(0);
@@ -83,7 +84,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    prewarm();   // compile the build tools + fetch the toolchain now, before Play
+    // compile the build tools + fetch the toolchain now, before Play; the
+    // status stays "warming up..." and Play stays disabled until this settles
+    // (a cold click would otherwise sit on a silent multi-second first build)
+    prewarm().then(() => setWarm(true));
     (async () => {
       const list = await refreshProjects();
       if (list.length) {
@@ -375,6 +379,12 @@ export function App() {
       files["project.json"] = writeManifest(m);
     }
     const rec = await createProject(ex.name, files, Date.now());
+    // big FLASH2M ports ship the CLI's winning bank layout; seed it so the
+    // fork's first build links in one pass instead of the ~10s placement
+    // search. AWAITED before openProject: opening triggers the shadow build,
+    // and worker messages process in order - the seed must land first.
+    const placement = await loadExamplePlacement(ex);
+    if (placement) seedReplay(String(rec.id), placement);
     await refreshProjects();
     await openProject(rec.id);
   }, [refreshProjects, openProject]);
@@ -400,7 +410,7 @@ export function App() {
 
   // --- build / play --------------------------------------------------------
   const play = useCallback(async () => {
-    if (errors.length) return;
+    if (errors.length || !warm) return;   // Ctrl-R lands here too; gate it like the button
     const seq = ++buildSeq.current;
     setBuilding(true); setBuildErr(""); setBuildMsg("building...");
     try {
@@ -417,6 +427,9 @@ export function App() {
         quadrantBytes,
         framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
         songs: songBytes,
+        // scopes the worker's FLASH2M placement replay to this project, so one
+        // project's banked layout never leaks into another's build
+        projectKey: String(currentId ?? ""),
         onProgress: (m) => { if (seq === buildSeq.current) setBuildMsg(m); },
       });
       if (seq !== buildSeq.current) return;
@@ -429,7 +442,28 @@ export function App() {
     } finally {
       if (seq === buildSeq.current) setBuilding(false);
     }
-  }, [source, errors.length, sheet, frames, songs, num8]);
+  }, [source, errors.length, sheet, frames, songs, num8, currentId, warm]);
+
+  // Shadow build: once per opened project, silently run the real build in the
+  // worker right after warmup. It populates the compile + placement caches (and
+  // IndexedDB), so the user's actual first Play is a cache hit instead of the
+  // full cold search. The worker is serial, so a Play clicked mid-shadow simply
+  // queues behind it - never slower than the old cold build.
+  const shadowed = useRef(new Set());
+  useEffect(() => {
+    if (!warm || !currentId || building || errors.length) return;
+    if (shadowed.current.has(currentId)) return;
+    shadowed.current.add(currentId);
+    try {
+      buildGtr(source, {
+        num8,
+        quadrantBytes: sheet ? splitSheet(sheet) : undefined,
+        framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
+        songs: songs && songs.length ? songs.map((sg) => songToBytes(sg.model)) : undefined,
+        projectKey: String(currentId),
+      }).catch(() => {});
+    } catch { /* best-effort warmer; Play reports real errors */ }
+  }, [warm, currentId, building, errors.length, source, sheet, frames, songs, num8]);
 
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
@@ -506,8 +540,9 @@ export function App() {
       <header className="topbar">
         <span className="logo">gt-lua <span className="dim">web</span></span>
         <input className="proj-name" value={projectName} onChange={(e) => rename(e.target.value)} title="project name" />
-        <button className="play" onClick={play} disabled={building || errors.length > 0} title="build & run (Ctrl-R)">
-          {building ? "building..." : "▶ Play"}
+        <button className="play" onClick={play} disabled={!warm || building || errors.length > 0}
+          title={warm ? "build & run (Ctrl-R)" : "warming up the build tools..."}>
+          {building ? "building..." : warm ? "▶ Play" : "warming up..."}
         </button>
         <button className="tb-btn" onClick={downloadGtr} disabled={!rom} title="download the built .gtr cart">.gtr</button>
         <button className="tb-btn" onClick={exportBundle} title="export project as .gtlua">export</button>
@@ -515,7 +550,7 @@ export function App() {
           <button className="tb-btn flash" onClick={flashToCart} disabled={!rom} title="flash the built cart to real GameTank hardware over USB">⚡ flash</button>
         )}
         <span className={"status " + (errors.length ? "err" : "ok")}>
-          {errors.length ? `${errors.length} error${errors.length > 1 ? "s" : ""}` : "ready"}
+          {errors.length ? `${errors.length} error${errors.length > 1 ? "s" : ""}` : warm ? "ready" : "warming up..."}
           {warnings.length ? ` · ${warnings.length} warning${warnings.length > 1 ? "s" : ""}` : ""}
         </span>
         <span className="build-msg">{buildErr ? <span className="err">{buildErr}</span> : buildMsg}</span>

@@ -27,12 +27,100 @@ const dec = new TextDecoder();
 const moduleCache = new Map();     // tool -> WebAssembly.Module (compiled)
 const shareCache = new Map();      // subdir -> Map<vfsPath, Uint8Array>
 const compileCache = new Map();    // cc65/ca65 result cache, PERSISTS across builds (see runTool)
+// FLASH2M placement replay (build/.placement.json): the CLI persists the last
+// winning bank layout on disk so the next build links in ONE pass instead of
+// re-running the placement ladder (6-9 game-unit recompiles + links). The
+// browser VFS is rebuilt per build, which silently dropped that file and made
+// EVERY banked build pay the full search (~3s warm, ~10s cold for a big game).
+// Carry it across builds here, keyed PER PROJECT: build() also uses the file's
+// mere existence as a "this cart overflows 32K" hint, so seeding another
+// project's layout would wrongly route a small EEPROM32K game to FLASH2M.
+const replayCache = new Map();     // projectKey -> Uint8Array
+const REPLAY_PATH = "/work/build/.placement.json";
 let sdkFiles = null;               // Map<path, Uint8Array>
 let shareManifest = null;
+
+// ---- IndexedDB persistence: the browser's equivalent of the CLI's build/ dir.
+// The Node CLI is subsecond warm ONLY because build/.placement.json + the object
+// files persist on disk; a fresh browser session had no disk, so every visit
+// paid the full ~10s FLASH2M search again. Both caches are content-addressed
+// (compileCache keys embed the source hash + flags), so invalidation is
+// automatic; the whole DB is versioned by a toolchain signature (hash of the
+// three tool .wasm binaries) and dropped wholesale when the toolchain changes.
+const DB_NAME = "gtlua-build-cache";
+const CC_CAP = 600;                // entry cap; nuke-and-rebuild past this
+let dbPromise = null;
+function openDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("cc")) db.createObjectStore("cc");
+        if (!db.objectStoreNames.contains("replay")) db.createObjectStore("replay");
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);      // private mode etc: run memory-only
+      req.onblocked = () => resolve(null);
+    } catch { resolve(null); }
+  });
+  return dbPromise;
+}
+const idbReq = (r) => new Promise((res) => { r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); });
+async function idbReadAll(db, store, into) {
+  await new Promise((res) => {
+    const cur = db.transaction(store).objectStore(store).openCursor();
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (c) { into.set(c.key, c.value); c.continue(); } else res();
+    };
+    cur.onerror = () => res();
+  });
+}
+async function idbClearAll(db) {
+  await Promise.all(["cc", "replay", "meta"].map((s) => idbReq(db.transaction(s, "readwrite").objectStore(s).clear())));
+}
+const dirtyCC = new Map(), dirtyReplay = new Map();
+function persistDirty() {          // fire-and-forget after each build
+  if (!dirtyCC.size && !dirtyReplay.size) return;
+  openDB().then((db) => {
+    if (!db) { dirtyCC.clear(); dirtyReplay.clear(); return; }
+    if (dirtyCC.size) {
+      const st = db.transaction("cc", "readwrite").objectStore("cc");
+      for (const [k, v] of dirtyCC) st.put(v, k);
+      dirtyCC.clear();
+    }
+    if (dirtyReplay.size) {
+      const st = db.transaction("replay", "readwrite").objectStore("replay");
+      for (const [k, v] of dirtyReplay) st.put(v, k);
+      dirtyReplay.clear();
+    }
+  }).catch(() => {});
+}
+const toolHashes = new Map();      // tool -> fnv of its wasm binary
+let toolSig = "";                  // deterministic signature over all tools
+async function loadPersistedCaches() {
+  const db = await openDB();
+  if (!db) return;
+  const saved = await idbReq(db.transaction("meta").objectStore("meta").get("toolSig"));
+  if (saved !== toolSig) { await idbClearAll(db); }
+  else {
+    await idbReadAll(db, "cc", compileCache);
+    await idbReadAll(db, "replay", replayCache);
+    if (compileCache.size > CC_CAP) {
+      compileCache.clear();
+      await idbReq(db.transaction("cc", "readwrite").objectStore("cc").clear());
+    }
+  }
+  db.transaction("meta", "readwrite").objectStore("meta").put(toolSig, "toolSig");
+}
 
 async function compileTool(tool) {
   if (moduleCache.has(tool)) return moduleCache.get(tool);
   const bytes = await (await fetch(`${GLUE_BASE}/${tool}.wasm`)).arrayBuffer();
+  toolHashes.set(tool, fnv1aHex(new Uint8Array(bytes)));
   const mod = await WebAssembly.compile(bytes);
   moduleCache.set(tool, mod);
   return mod;
@@ -70,6 +158,10 @@ async function warmup() {
     loadShareSub("include"), loadShareSub("asminc"), loadShareSub("lib"), loadShareSub("cfg"),
     loadSdkRuntime(),
   ]);
+  // sorted so Promise.all completion order can't change the signature
+  toolSig = [...toolHashes.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([t, h]) => `${t}:${h}`).join(";");
+  await loadPersistedCaches();
 }
 
 // ---- posix path + hash helpers (build.js's env) -----------------------------
@@ -100,6 +192,9 @@ async function buildCart(source, opts = {}) {
   await warmup();
 
   const vfs = new Map(sdkFiles);              // warm SDK runtime, cloned per build
+  const projectKey = typeof opts.projectKey === "string" ? opts.projectKey : "";
+  const replay = projectKey && replayCache.get(projectKey);
+  if (replay) vfs.set(REPLAY_PATH, replay);   // seed THIS project's placement replay
   // Pre-mount the whole cc65 share tree so build()'s `env.exists(asminc)` guard
   // (checked before any tool runs) sees it, and so every tool finds its files.
   for (const sub of ["include", "asminc", "lib", "cfg"]) {
@@ -170,7 +265,11 @@ async function buildCart(source, opts = {}) {
     if (cacheKey && status === 0) {
       const oi = args.indexOf("-o");
       const out = vfs.get(args[oi + 1]);
-      if (out) compileCache.set(cacheKey, { out, status, stderr: cleanErr });
+      if (out) {
+        const entry = { out, status, stderr: cleanErr };
+        compileCache.set(cacheKey, entry);
+        dirtyCC.set(cacheKey, entry);   // flushed to IndexedDB after the build
+      }
     }
     return { status, stdout: "", stderr: cleanErr };
   };
@@ -202,6 +301,10 @@ async function buildCart(source, opts = {}) {
   await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath, songsPaths }, env);
 
   const gtr = vfs.get(gtrPath);
+  // harvest the winning placement for this project's next one-pass replay
+  const rp = vfs.get(REPLAY_PATH);
+  if (projectKey && rp) { replayCache.set(projectKey, rp); dirtyReplay.set(projectKey, rp); }
+  persistDirty();
   return { ok: true, gtr, ms: Math.round(performance.now() - t0) };
 }
 
@@ -216,6 +319,20 @@ self.onmessage = async (e) => {
   if (type === "warm") {
     try { await warmPromise; postMessage({ type: "warm-done", id }); }
     catch (err) { postMessage({ type: "warm-done", id, error: String(err) }); }
+    return;
+  }
+  // seed a known-good FLASH2M placement for a project (the staged examples ship
+  // the CLI's build/.placement.json), so even the FIRST-EVER build of a big port
+  // links in one pass instead of running the placement ladder. Never overwrites
+  // a layout the worker has already earned for that project.
+  if (type === "seedReplay") {
+    const { projectKey, bytes } = e.data;
+    if (typeof projectKey === "string" && projectKey && bytes && !replayCache.has(projectKey)) {
+      const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      replayCache.set(projectKey, u8);
+      dirtyReplay.set(projectKey, u8);
+      persistDirty();
+    }
     return;
   }
   if (type !== "build") return;

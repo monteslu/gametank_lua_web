@@ -23,3 +23,17 @@ export async function loadExampleFiles(example) {
   );
   return Object.fromEntries(entries);
 }
+
+/**
+ * Fetch an example's staged FLASH2M placement (the CLI's build/.placement.json,
+ * staged as placement.json for the big ports), or null if it doesn't ship one.
+ * NOT part of the forked project files; it seeds the build worker's replay
+ * cache so the first-ever build links in one pass.
+ */
+export async function loadExamplePlacement(example) {
+  try {
+    const res = await fetch(`${BASE}/${example.name}/placement.json`);
+    if (!res.ok) return null;
+    return new Uint8Array(await res.arrayBuffer());
+  } catch { return null; }
+}
