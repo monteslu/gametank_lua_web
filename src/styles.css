@@ -243,6 +243,19 @@ body {
 .ff-row input { width: 70px; background: #12151c; color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; font: 12px var(--mono); }
 .ff-center { margin-top: 6px; font: 11px system-ui, sans-serif; color: var(--fg); background: #262b36; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
 
+/* flash button + modal */
+.tb-btn.flash { color: var(--sun); border-color: var(--sun); }
+.tb-btn.flash:hover:not(:disabled) { background: rgba(255,212,94,0.12); }
+.flash-modal { position: fixed; inset: 0; background: rgba(10,8,18,0.72); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.flash-box { width: 460px; max-width: 90vw; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.flash-title { font: 800 15px system-ui, sans-serif; color: var(--sun); margin-bottom: 12px; }
+.flash-bar { height: 10px; background: #12151c; border-radius: 999px; overflow: hidden; margin-bottom: 8px; }
+.flash-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--sun)); transition: width 0.2s; }
+.flash-status { font: 12px var(--mono); color: var(--fg); margin-bottom: 8px; }
+.flash-status .err { color: var(--err); }
+.flash-log { font: 11px/1.5 var(--mono); color: var(--dim); max-height: 160px; overflow: auto; background: #12151c; border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
+.flash-box .tb-btn { width: 100%; }
+
 /* debugger: RAM viewer */
 .pane-tabs.bottom { border-top: 0; }
 .ram-empty { padding: 16px 12px; color: var(--dim); font: 12px var(--mono); }

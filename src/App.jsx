@@ -6,6 +6,7 @@ const Editor = React.lazy(() => import("./Editor.jsx").then((m) => ({ default: m
 import { buildGtr } from "./build/build-client.js";
 import { EmulatorPane } from "./emu/EmulatorPane.jsx";
 import { RamViewer } from "./emu/RamViewer.jsx";
+import { WebSerialFlasher, webSerialAvailable } from "./flash/web-serial-flasher.js";
 import { Sidebar } from "./projects/Sidebar.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
 import { loadExampleFiles } from "./projects/examples.js";
@@ -52,6 +53,7 @@ export function App() {
   const [rom, setRom] = useState(null);
   const [host, setHost] = useState(null);          // running GameTankHost (for the debugger)
   const [bottomTab, setBottomTab] = useState("problems");   // "problems" | "ram"
+  const [flash, setFlash] = useState(null);        // { log:[], done, total, label, error, running } while flashing
   const [building, setBuilding] = useState(false);
   const [buildMsg, setBuildMsg] = useState("");
   const [buildErr, setBuildErr] = useState("");
@@ -294,6 +296,28 @@ export function App() {
     downloadBytes(`${projectName || "game"}.gtr`, rom, "application/octet-stream");
   }, [rom, projectName]);
 
+  // flash the built cart to real hardware over Web Serial (the GTFO programmer)
+  const flashToCart = useCallback(async () => {
+    if (!rom) return;
+    setFlash({ log: [], done: 0, total: 1, label: "", running: true, error: null });
+    const flasher = new WebSerialFlasher({
+      onProgress: (e) => setFlash((f) => {
+        if (!f) return f;
+        if (e.type === "log") return { ...f, log: [...f.log, e.msg] };
+        return { ...f, done: e.done, total: e.total, label: e.label };
+      }),
+    });
+    try {
+      await flasher.open();       // shows the serial port picker
+      await flasher.flash(rom);
+      setFlash((f) => f && { ...f, running: false });
+    } catch (e) {
+      setFlash((f) => f && { ...f, running: false, error: String(e?.message ?? e) });
+    } finally {
+      try { await flasher.close(); } catch { /* */ }
+    }
+  }, [rom]);
+
   const exportBundle = useCallback(async () => {
     const rec = currentId ? await getProject(currentId) : { files: { "main.lua": source } };
     const files = { ...rec.files };
@@ -330,6 +354,9 @@ export function App() {
         </button>
         <button className="tb-btn" onClick={downloadGtr} disabled={!rom} title="download the built .gtr cart">.gtr</button>
         <button className="tb-btn" onClick={exportBundle} title="export project as .gtlua">export</button>
+        {webSerialAvailable() && (
+          <button className="tb-btn flash" onClick={flashToCart} disabled={!rom} title="flash the built cart to real GameTank hardware over USB">⚡ flash</button>
+        )}
         <span className={"status " + (errors.length ? "err" : "ok")}>
           {errors.length ? `${errors.length} error${errors.length > 1 ? "s" : ""}` : "ready"}
           {warnings.length ? ` · ${warnings.length} warning${warnings.length > 1 ? "s" : ""}` : ""}
@@ -406,6 +433,24 @@ export function App() {
           </section>
         </main>
       </div>
+
+      {flash && (
+        <div className="flash-modal" onClick={(e) => { if (e.target === e.currentTarget && !flash.running) setFlash(null); }}>
+          <div className="flash-box">
+            <div className="flash-title">⚡ flashing to GameTank</div>
+            {!flash.error && (
+              <div className="flash-bar"><div className="flash-fill" style={{ width: `${Math.round((flash.done / flash.total) * 100)}%` }} /></div>
+            )}
+            <div className="flash-status">
+              {flash.error ? <span className="err">{flash.error}</span>
+                : flash.running ? `${flash.label} — ${flash.done}/${flash.total} blocks`
+                : "done ✓"}
+            </div>
+            <div className="flash-log">{flash.log.map((l, i) => <div key={i}>{l}</div>)}</div>
+            {!flash.running && <button className="tb-btn" onClick={() => setFlash(null)}>close</button>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
