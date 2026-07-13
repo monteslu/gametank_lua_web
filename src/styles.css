@@ -194,7 +194,16 @@ body {
 .sprite-toolbar .tool:hover, .music-toolbar .tool:hover, .frame-toolbar .tool:hover { border-color: var(--grape); }
 .sprite-toolbar .tool.sel { background: linear-gradient(180deg, #ffa3d6, var(--accent)); color: #2a0b1e; border-color: var(--accent); }
 .sprite-toolbar .tool.import, .music-toolbar .tool.import { color: var(--accent-2); border-color: var(--accent-2); }
+/* icon tool buttons: square-ish, the Tabler glyph centered */
+.sprite-toolbar .tool.icon {
+  padding: 5px; width: 30px; height: 30px; display: inline-flex;
+  align-items: center; justify-content: center; border-radius: 7px;
+}
+.sprite-toolbar .tool.icon .ti { font-size: 17px; line-height: 1; }
+.sprite-toolbar .tool.icon:disabled { opacity: 0.35; cursor: default; border-color: var(--line); }
+.sprite-toolbar .tool.icon.sel { background: linear-gradient(180deg, #ffa3d6, var(--accent)); color: #2a0b1e; border-color: var(--accent); }
 .sprite-toolbar .import-msg, .music-toolbar .import-msg, .frame-toolbar .import-msg { font: 11px var(--mono); color: var(--ok); }
+.sprite-toolbar .tb-gap { width: 6px; }
 .sprite-toolbar .tb-sep { flex: 1; }
 .sprite-toolbar .zoom { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--dim); }
 .sprite-body { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
@@ -242,7 +251,10 @@ body {
 .frame-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0f1117; }
 .frame-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .fe-hint { font: 12px var(--mono); color: var(--dim); }
-.frame-body { flex: 1; display: flex; min-height: 0; overflow: auto; }
+.frame-body { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+/* the canvas area scrolls on its own so zooming grows/scrolls it WITHOUT moving
+   the frame list beside it. */
+.frame-canvas-scroll { flex: 1 1 auto; min-width: 0; overflow: auto; }
 .frame-canvas-wrap { position: relative; flex: 0 0 auto; margin: 16px; }
 .frame-canvas { image-rendering: pixelated; border: 1px solid var(--line); background: #000; display: block; }
 .frame-overlay { position: absolute; inset: 0; cursor: crosshair; }
@@ -252,7 +264,7 @@ body {
 .frame-num { fill: #fff; font: 5px var(--mono); paint-order: stroke; stroke: #000; stroke-width: 0.6; }
 .frame-anchor { fill: var(--warn); stroke: #000; stroke-width: 0.4; }
 
-.frame-side { flex: 1; min-width: 240px; border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: auto; }
+.frame-side { flex: 0 0 260px; width: 260px; border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: auto; }
 .frame-list-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font: 11px var(--mono); color: var(--dim); text-transform: uppercase; }
 .fe-play { font: 700 12px system-ui, sans-serif; color: #2a0b1e; background: linear-gradient(180deg, #ffa3d6, var(--accent)); border: 0; border-radius: 999px; padding: 5px 13px; cursor: pointer; }
 .fe-play:disabled { opacity: 0.4; cursor: default; }

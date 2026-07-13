@@ -164,29 +164,33 @@ export function FrameEditor({ sheet, frames, onChange }) {
       </div>
 
       <div className="frame-body">
-        {/* sheet + frame-rect overlay */}
-        <div className="frame-canvas-wrap" style={{ width: dim, height: dim }}>
-          <canvas ref={canvasRef} className="frame-canvas" width={SHEET_DIM} height={SHEET_DIM}
-            style={{ width: dim, height: dim }} />
-          <svg ref={overlayRef} className="frame-overlay" width={dim} height={dim}
-            viewBox={`0 0 ${SHEET_DIM} ${SHEET_DIM}`}
-            onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
-            {frames.map((f, i) => (
-              <g key={i} style={{ pointerEvents: "none" }}>
-                <rect x={f.gx} y={f.gy} width={f.w} height={f.h}
-                  className={"frame-rect " + (i === sel ? "sel" : "")} />
-                <text x={f.gx + 1} y={f.gy + 6} className="frame-num">{i}</text>
-                {/* anchor marker: the sprite's origin = (gx - vxo, gy - vyo)... the
-                    anchor within the frame is at (-vxo, -vyo) from the top-left */}
-                {i === sel && (
-                  <circle cx={f.gx - f.vxo} cy={f.gy - f.vyo} r={1.6} className="frame-anchor" />
-                )}
-              </g>
-            ))}
-            {carveBox && (
-              <rect x={carveBox.x} y={carveBox.y} width={carveBox.w} height={carveBox.h} className="frame-rect carving" />
-            )}
-          </svg>
+        {/* the sheet scrolls INSIDE this box when zoomed past the pane, so the
+            frame list beside it stays put (only the canvas area moves). */}
+        <div className="frame-canvas-scroll">
+          {/* sheet + frame-rect overlay */}
+          <div className="frame-canvas-wrap" style={{ width: dim, height: dim }}>
+            <canvas ref={canvasRef} className="frame-canvas" width={SHEET_DIM} height={SHEET_DIM}
+              style={{ width: dim, height: dim }} />
+            <svg ref={overlayRef} className="frame-overlay" width={dim} height={dim}
+              viewBox={`0 0 ${SHEET_DIM} ${SHEET_DIM}`}
+              onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
+              {frames.map((f, i) => (
+                <g key={i} style={{ pointerEvents: "none" }}>
+                  <rect x={f.gx} y={f.gy} width={f.w} height={f.h}
+                    className={"frame-rect " + (i === sel ? "sel" : "")} />
+                  <text x={f.gx + 1} y={f.gy + 6} className="frame-num">{i}</text>
+                  {/* anchor marker: the sprite's origin = (gx - vxo, gy - vyo)... the
+                      anchor within the frame is at (-vxo, -vyo) from the top-left */}
+                  {i === sel && (
+                    <circle cx={f.gx - f.vxo} cy={f.gy - f.vyo} r={1.6} className="frame-anchor" />
+                  )}
+                </g>
+              ))}
+              {carveBox && (
+                <rect x={carveBox.x} y={carveBox.y} width={carveBox.w} height={carveBox.h} className="frame-rect carving" />
+              )}
+            </svg>
+          </div>
         </div>
 
         {/* right column: frame list, fields, preview */}

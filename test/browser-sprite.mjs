@@ -35,22 +35,48 @@ try {
   const box = await canvas.boundingBox();
   await page.mouse.move(box.x + 30, box.y + 30); await page.mouse.down();
   await page.mouse.move(box.x + 150, box.y + 150, { steps: 8 }); await page.mouse.up();
-  await page.click(".tool >> text=rect");
+  await page.locator('.sprite-toolbar .tool.icon:has(.ti-rectangle)').click();  // rect tool (now an icon)
   await page.mouse.move(box.x + 60, box.y + 200); await page.mouse.down();
   await page.mouse.move(box.x + 260, box.y + 320, { steps: 6 }); await page.mouse.up();
   await page.waitForTimeout(300);
 
-  const painted = await page.evaluate(() => {
+  // count painted pixels now, so we can prove undo reduces them
+  const countPainted = () => page.evaluate(() => {
     const c = document.querySelector(".sprite-canvas");
-    const { data } = c.getContext("2d").getImageData(0, 0, 128, 128);
+    const { data } = c.getContext("2d").getImageData(0, 0, 256, 256);
     let n = 0;
     for (let i = 0; i < data.length; i += 4) {
-      const r = data[i], g = data[i+1];
-      const isChecker = Math.abs(r-g) < 3 && r <= 48;
-      if (!isChecker) n++;
+      const r = data[i], g = data[i + 1];
+      if (!(Math.abs(r - g) < 3 && r <= 48)) n++;   // not checker background
     }
     return n;
   });
+  const beforeUndo = await countPainted();
+
+  // UNDO removes the last stroke (the rect); painted count drops
+  await page.locator('.sprite-toolbar .tool.icon[aria-label="undo"]').click();
+  await page.waitForTimeout(200);
+  const afterUndo = await countPainted();
+  check("undo removed the last stroke", afterUndo < beforeUndo);
+
+  // EYEDROPPER: change the active color, then pick the drawn color back. The
+  // selected swatch should return to byte 31 (185,197,65).
+  await page.locator(".pal-grid .swatch").nth(5).click();          // change color away
+  await page.locator('.sprite-toolbar .tool.icon:has(.ti-color-picker)').click();
+  await page.mouse.move(box.x + 90, box.y + 90); await page.mouse.down(); await page.mouse.up();
+  await page.waitForTimeout(150);
+  const droppedBack = await page.evaluate(() => {
+    const sel = document.querySelector(".pal-grid .swatch.sel");
+    return sel ? /185.*197.*65/.test(getComputedStyle(sel).backgroundColor) : false;
+  });
+  check("eyedropper picked the drawn color (swatch = byte 31)", droppedBack);
+
+  // re-apply the rect (redo) so the persist/build steps below still have art
+  await page.locator(".sprite-canvas").hover();
+  await page.keyboard.press("Control+Shift+KeyZ");
+  await page.waitForTimeout(200);
+
+  const painted = await countPainted();
   check("pencil + rect painted pixels", painted > 80);
 
   // the palette swatch RGB must match the core CAPTURE table (byte 31)
@@ -82,5 +108,5 @@ try {
 } finally {
   if (proc) try { process.kill(-proc.pid, "SIGKILL"); } catch {}
 }
-console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - sprite editor (draw + core palette + persist + build)");
+console.log(failed ? "\nRESULT: FAIL" : "\nRESULT: PASS - sprite editor (draw + undo + eyedropper + core palette + persist + build)");
 process.exit(failed ? 1 : 0);

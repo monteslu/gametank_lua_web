@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import "./styles.css";
+import "./icons.css";
 import "./build/test-hook.js";
 
 // Monaco's web workers, bundled locally by Vite (?worker) instead of fetched

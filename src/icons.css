@@ -1,0 +1,41 @@
+/* Tabler Icons (MIT) - self-hosted subset. We ship the full woff2 (Vite bundles
+   + fingerprints it, no external host / CDN, works offline), but only declare the
+   handful of glyph classes the toolbars actually use, so there's no 200 KB CSS of
+   6000 unused icon names. Codepoints are Tabler's own (v3.44.0). To add an icon,
+   grep its `.ti-<name>:before{content:"\XXXX"}` in
+   node_modules/@tabler/icons-webfont/dist/tabler-icons.min.css and add a line. */
+
+@font-face {
+  font-family: "tabler-icons";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("./assets/fonts/tabler-icons.woff2") format("woff2");
+}
+
+.ti {
+  font-family: "tabler-icons" !important;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  speak: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: inline-block;
+}
+
+/* drawing tools */
+.ti-pencil::before { content: "\eb04"; }
+.ti-eraser::before { content: "\eb8b"; }
+.ti-bucket::before { content: "\ea47"; }        /* fill */
+.ti-line::before { content: "\ec40"; }
+.ti-rectangle::before { content: "\ed37"; }
+.ti-color-picker::before { content: "\ebe6"; }  /* eyedropper */
+
+/* actions */
+.ti-arrow-back-up::before { content: "\eb77"; } /* undo */
+.ti-photo::before { content: "\eb0a"; }         /* import image */
+.ti-file-import::before { content: "\edea"; }
+.ti-file-export::before { content: "\ede9"; }

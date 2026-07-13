@@ -6,7 +6,16 @@ import { pngToSheet, rgbaToSheet } from "./png-import.js";
 import { aseToRgba, aseToSheetAndFrames, parseAseprite } from "./aseprite-import.js";
 import { pickFile, downloadBytes } from "../util/download.js";
 
-const TOOLS = ["pencil", "eraser", "fill", "line", "rect"];
+// drawing tools: id -> Tabler icon class + tooltip. "dropper" (eyedropper) picks
+// the color under the cursor instead of painting.
+const TOOLS = [
+  { id: "pencil", icon: "ti-pencil", tip: "Pencil" },
+  { id: "eraser", icon: "ti-eraser", tip: "Eraser (paint transparent)" },
+  { id: "fill", icon: "ti-bucket", tip: "Fill (flood the same-color region)" },
+  { id: "line", icon: "ti-line", tip: "Line" },
+  { id: "rect", icon: "ti-rectangle", tip: "Rectangle (outline)" },
+  { id: "dropper", icon: "ti-color-picker", tip: "Eyedropper (pick a color from the sheet)" },
+];
 
 // Paint the sheet into an ImageData (transparent byte 0 -> checkerboard so it
 // reads as "no pixel", matching how the blitter skips it).
@@ -86,6 +95,33 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const [hover, setHover] = useState(null);      // { x, y, cell, quad } cursor readout
   const drawing = useRef(null);                  // { startX, startY, base } during a drag
 
+  // undo/redo: snapshot the sheet BEFORE each stroke/action so undo steps by
+  // whole edits (not per-pixel). Bounded stacks of Uint8Array snapshots.
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const [histLen, setHistLen] = useState({ u: 0, r: 0 });
+  const UNDO_MAX = 40;
+  const snapshot = useCallback(() => {
+    undoStack.current.push(new Uint8Array(sheet));
+    if (undoStack.current.length > UNDO_MAX) undoStack.current.shift();
+    redoStack.current.length = 0;   // a new edit invalidates the redo trail
+    setHistLen({ u: undoStack.current.length, r: 0 });
+  }, [sheet]);
+  const undo = useCallback(() => {
+    if (!undoStack.current.length) return;
+    redoStack.current.push(new Uint8Array(sheet));
+    const prev = undoStack.current.pop();
+    onChange(prev);
+    setHistLen({ u: undoStack.current.length, r: redoStack.current.length });
+  }, [sheet, onChange]);
+  const redo = useCallback(() => {
+    if (!redoStack.current.length) return;
+    undoStack.current.push(new Uint8Array(sheet));
+    const next = redoStack.current.pop();
+    onChange(next);
+    setHistLen({ u: undoStack.current.length, r: redoStack.current.length });
+  }, [sheet, onChange]);
+
   // repaint the sheet whenever it changes
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
@@ -146,6 +182,12 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     const p = pixelAt(e);
     if (!p) return;
     e.preventDefault();
+    // eyedropper: pick the color under the cursor, don't paint (no undo entry)
+    if (tool === "dropper") {
+      setColor(getPixel(sheet, p.x, p.y));
+      return;
+    }
+    snapshot();   // remember the pre-edit sheet for undo (one entry per stroke)
     const buf = new Uint8Array(sheet);
     const paint = tool === "eraser" ? TRANSPARENT : color;
     if (tool === "pencil" || tool === "eraser") {
@@ -190,6 +232,22 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     return () => window.removeEventListener("mouseup", onUp);
   }, []);
 
+  // Ctrl/Cmd+Z = undo, Ctrl+Shift+Z / Ctrl+Y = redo - but only when the sprite
+  // editor is the active area (not while typing in the code editor, etc.).
+  const rootRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!rootRef.current || !rootRef.current.contains(document.activeElement) && !rootRef.current.matches(":hover")) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   const [importMsg, setImportMsg] = useState("");
   const flash = (m) => { setImportMsg(m); setTimeout(() => setImportMsg(""), 4000); };
   const importImage = useCallback(async () => {
@@ -209,15 +267,17 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
           return;
         }
         const result = rgbaToSheet(await aseToRgba(picked.bytes));
+        snapshot();
         onChange(result.sheet);
-        flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
+        flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 256×256)" : ""}`);
         return;
       }
       const result = await pngToSheet(picked.bytes);
+      snapshot();
       onChange(result.sheet);
-      flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 128×128)" : ""}`);
+      flash(`imported ${result.width}×${result.height}${result.cropped ? " (cropped to 256×256)" : ""}`);
     } catch (e) { flash(`import failed: ${e.message}`); }
-  }, [onChange, onImportAnimation]);
+  }, [onChange, onImportAnimation, snapshot]);
 
   // raw .gtg import/export - the exact 128x128 quadrant file a C-SDK build
   // consumes (gfx.gtg / gfx_1 / _2 / _3), so assets round-trip between our editor
@@ -231,31 +291,46 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
       const q = fromGtg(picked.bytes);           // validates 16384 bytes
       const buf = sheet ? new Uint8Array(sheet) : newSheet();
       setQuadrant(buf, quad, q);
+      snapshot();
       onChange(buf);
       flash(`imported .gtg into ${QUAD_NAME[quad].split(" ")[0]}`);
     } catch (e) { flash(`import failed: ${e.message}`); }
-  }, [onChange, sheet, quad]);
+  }, [onChange, sheet, quad, snapshot]);
   const exportGtg = useCallback(() => {
     const names = ["gfx.gtg", "gfx_1.gtg", "gfx_2.gtg", "gfx_3.gtg"];
     downloadBytes(names[quad], quadrantOf(sheet, quad), "application/octet-stream");
   }, [sheet, quad]);
 
   return (
-    <div className="sprite-editor">
+    <div className="sprite-editor" ref={rootRef}>
       <div className="sprite-toolbar">
         {TOOLS.map((t) => (
-          <button key={t} className={"tool " + (tool === t ? "sel" : "")} onClick={() => setTool(t)}>{t}</button>
+          <button
+            key={t.id}
+            className={"tool icon tip " + (tool === t.id ? "sel" : "")}
+            onClick={() => setTool(t.id)}
+            data-tip={t.tip}
+            aria-label={t.tip}
+          ><i className={"ti " + t.icon} /></button>
         ))}
+        <span className="tb-gap" />
+        <button
+          className="tool icon tip"
+          onClick={undo}
+          disabled={histLen.u === 0}
+          data-tip="Undo (Ctrl+Z)"
+          aria-label="undo"
+        ><i className="ti ti-arrow-back-up" /></button>
         <span className="tb-sep" />
         {importMsg && <span className="import-msg">{importMsg}</span>}
-        <button className="tool import" onClick={importImage} title="import a PNG or Aseprite file (nearest-color to the GameTank palette; up to 256x256)">import image</button>
+        <button className="tool icon tip" onClick={importImage} data-tip="Import a PNG or Aseprite file" aria-label="import image"><i className="ti ti-photo" /></button>
         <label className="quad-sel" title="which 128x128 quadrant .gtg import/export targets (gfx.gtg / gfx_1 / _2 / _3)">
           <select value={quad} onChange={(e) => setQuad(+e.target.value)}>
             {QUAD_NAME.map((n, i) => <option key={i} value={i}>{["gfx.gtg", "gfx_1", "gfx_2", "gfx_3"][i]} · {n}</option>)}
           </select>
         </label>
-        <button className="tool" onClick={importGtg} title="import a raw 128x128 .gtg quadrant (e.g. from a C project) into the selected quadrant">.gtg ▾</button>
-        <button className="tool" onClick={exportGtg} title="export the selected quadrant as a raw .gtg (for a C project)">.gtg ▴</button>
+        <button className="tool icon tip" onClick={importGtg} data-tip="Import a .gtg quadrant into the selected quadrant" aria-label="import .gtg"><i className="ti ti-file-import" /></button>
+        <button className="tool icon tip" onClick={exportGtg} data-tip="Export the selected quadrant as a .gtg" aria-label="export .gtg"><i className="ti ti-file-export" /></button>
         <label className="grid-toggle" title="show the 8x8 cell grid (NW) + quadrant borders">
           <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> grid
         </label>
