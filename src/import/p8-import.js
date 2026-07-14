@@ -543,14 +543,19 @@ function romGfxQuadrant(rom) {
 // spr() cell). PICO-8's "shared" bottom 32 rows (which alias the sheet's upper
 // half) are rarely used and we skip them. Returns 4096 bytes, or null if empty.
 function romMap(rom) {
-  const map = new Uint8Array(128 * 32);
-  let any = false;
-  for (let i = 0; i < map.length; i++) {
+  const full = new Uint8Array(128 * 32);
+  let lastRow = -1;
+  for (let i = 0; i < full.length; i++) {
     const b = rom[0x2000 + i];
-    if (b) any = true;
-    map[i] = b;
+    full[i] = b;
+    if (b) lastRow = (i / 128) | 0;
   }
-  return any ? map : null;
+  if (lastRow < 0) return null;
+  // ship only the used rows (128-wide stride kept). PICO-8 maps are 128x32 but
+  // usually only the top rows hold tiles - a full 4KB const array can blow the
+  // fixed ROM bank on a big cart (peeeko uses 16 of 32 rows). map()/mget() read
+  // with a 128 stride, so a shorter row count is fine as long as reads stay in.
+  return full.slice(0, (lastRow + 1) * 128);
 }
 
 /**
