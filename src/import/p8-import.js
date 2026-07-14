@@ -57,6 +57,84 @@ export function hoistImplicitGlobals(lua) {
   return { lua: out, count: declared.size };
 }
 
+// PICO-8 entity lists are unbounded tables: `things = {}` then add(things, {...})
+// and `for e in all(things)`. gtlua's equivalent is a capacity-bounded pool, so
+// convert an empty-table variable that is later add()-ed or all()-ed into a
+// `pool(N)` declaration. We find the names the compiler flags with "needs a
+// top-level pool", rewrite their `name = {}` to `local name = pool(CAP)` hoisted
+// to top level, and drop the original empty-table line.
+const POOL_CAP = 32;   // default capacity for a converted entity list
+export function poolFromEmptyTables(lua) {
+  // Only convert a variable that shows the FULL entity-list lifecycle, so we
+  // never turn a coincidental temporary into a global pool:
+  //   1. declared exactly `name = {}` somewhere, AND
+  //   2. add(name, {...}) with a TABLE literal (an entity), AND
+  //   3. iterated with `for x in all(name)`.
+  // A real PICO-8 entity list has all three; a local temporary that happens to
+  // be add()-ed does not.
+  const candidates = new Set();
+  const declRe = /(?:^|\n)[ \t]*(?:local[ \t]+)?([A-Za-z_]\w*)[ \t]*=[ \t]*\{[ \t]*\}[ \t]*(?:$|\n)/g;
+  for (let m; (m = declRe.exec(lua)); ) candidates.add(m[1]);
+  const isList = (name) =>
+    new RegExp(`\\badd\\s*\\(\\s*${name}\\s*,\\s*\\{`).test(lua) &&
+    new RegExp(`\\bfor\\s+\\w+\\s+in\\s+all\\s*\\(\\s*${name}\\s*\\)`).test(lua);
+  const lists = [...candidates].filter(isList);
+  if (!lists.length) return { lua, count: 0 };
+
+  let out = lua;
+  const decls = [];
+  for (const name of lists) {
+    decls.push(`local ${name} = pool(${POOL_CAP})`);
+    // drop the original `name = {}` declaration line
+    out = out.replace(new RegExp(`^[ \\t]*(?:local[ \\t]+)?${name}[ \\t]*=[ \\t]*\\{[ \\t]*\\}[ \\t]*$`, "m"), "");
+  }
+  const lines = out.split("\n");
+  let i = 0;
+  while (i < lines.length && (lines[i] === "" || lines[i].startsWith("--"))) i++;
+  const block = "-- PICO-8 entity lists -> capacity-bounded pools\n" + decls.join("\n") + "\n\n";
+  out = lines.slice(0, i).join("\n") + (i ? "\n" : "") + block + lines.slice(i).join("\n");
+  return { lua: out, count: lists.length };
+}
+
+// A constant array table (`frames = {135, 137, 139}`) compiles only as a
+// top-level declaration in gtlua. PICO-8 carts often assign one inside a
+// function or _init(). Hoist any `name = {const, const, ...}` (all-numeric
+// elements) to a top-level `local name = {...}` and drop the inner line.
+export function hoistConstArrayTables(lua) {
+  let out = lua;
+  const hoisted = new Set();
+  for (let pass = 0; pass < 3; pass++) {
+    let errs;
+    try { errs = compile(out, "main.lua").diagnostics; } catch { break; }
+    const decls = [];
+    const lines = out.split("\n");
+    for (const d of errs) {
+      if (d.severity !== "error" || !/array table.*only allowed as a top-level/.test(d.message)) continue;
+      const line = lines[d.line - 1] || "";
+      // name = { n, n, n }  with only numeric (and negative/float) elements
+      const m = line.match(/^([ \t]*)(?:local[ \t]+)?([A-Za-z_]\w*)[ \t]*=[ \t]*(\{[-0-9.,\s]*\})[ \t]*$/);
+      if (!m || hoisted.has(m[2])) continue;
+      hoisted.add(m[2]);
+      decls.push(`local ${m[2]} = ${m[3].replace(/\s+/g, " ")}`);
+      lines[d.line - 1] = "";   // drop the in-function assignment
+      // the implicit-global pass may have already declared `local name = 0` for
+      // this name (it read as an undeclared write before we hoisted the table) -
+      // drop that stub so the array-table declaration is the only one.
+      for (let k = 0; k < lines.length; k++) {
+        if (new RegExp(`^local ${m[2]} = 0$`).test(lines[k])) { lines[k] = ""; break; }
+      }
+    }
+    if (!decls.length) break;
+    out = lines.join("\n");
+    let i = 0;
+    const ol = out.split("\n");
+    while (i < ol.length && (ol[i] === "" || ol[i].startsWith("--"))) i++;
+    const block = "-- constant lookup tables hoisted to top level\n" + decls.join("\n") + "\n\n";
+    out = ol.slice(0, i).join("\n") + (i ? "\n" : "") + block + ol.slice(i).join("\n");
+  }
+  return { lua: out, count: hoisted.size };
+}
+
 // ---- section splitting ------------------------------------------------------
 const SECTIONS = ["lua", "gfx", "gff", "label", "map", "sfx", "music"];
 export function parseP8(text) {
@@ -339,7 +417,9 @@ export function p8ToProject(text, name) {
     }
   }
 
+  ({ lua } = poolFromEmptyTables(lua));
   ({ lua } = hoistImplicitGlobals(lua));
+  ({ lua } = hoistConstArrayTables(lua));
   const files = { "main.lua": BANNER(name, notes, gaps) + lua };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
@@ -520,7 +600,9 @@ export async function p8PngToProject(bytes, name) {
       out = decl + `function _init()\n${calls.join("\n")}\nend\n\n` + out;
     }
   }
+  ({ lua: out } = poolFromEmptyTables(out));
   ({ lua: out } = hoistImplicitGlobals(out));
+  ({ lua: out } = hoistConstArrayTables(out));
   const files = { "main.lua": BANNER(name, notes, gaps) + out };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
