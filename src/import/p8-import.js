@@ -164,13 +164,82 @@ function bankFromParsed(sfx, music) {
   return { sfxHex: toHex(blob), musicHex };
 }
 
-// ---- put it together --------------------------------------------------------
-const BANNER = (name, notes) => `-- ${name} - imported from a PICO-8 cart.
+// ---- P8SCII button glyphs ---------------------------------------------------
+// PICO-8 lets you write button indices as single-character glyphs: btn(⬅️),
+// btnp(❎), etc. On disk these are single P8SCII control bytes (0x80-0x9a), not
+// UTF-8 - our pixel->ROM->string decode surfaces them as U+0080..U+009a. gt-lua's
+// lexer has no idea what they are ("unexpected character").
+//   ⬅️ 0x8b   ➡️ 0x91   ⬆️ 0x94   ⬇️ 0x83   🅾️ 0x8e   ❎ 0x97
+// Two very different uses in real carts, so handle each precisely:
+//   1. as a btn()/btnp() ARGUMENT  -> the numeric index PICO-8 defines (exact).
+//   2. inside a display STRING ("press ❎ to start") -> its numeric value there
+//      would corrupt the on-screen text, so swap in a readable ASCII token
+//      ([O], [X], arrows) that both lexes and reads sensibly.
+const P8_BTN_INDEX = { 0x8b: "0", 0x91: "1", 0x94: "2", 0x83: "3", 0x8e: "4", 0x97: "5" };
+const P8_BTN_ASCII = { 0x8b: "[<]", 0x91: "[>]", 0x94: "[^]", 0x83: "[v]", 0x8e: "[O]", 0x97: "[X]" };
+// one alternation of all six glyphs, e.g. /[]/
+const GLYPH_CLASS = "[" + Object.keys(P8_BTN_INDEX).map((h) => "\\u" + (+h).toString(16).padStart(4, "0")).join("") + "]";
+
+/**
+ * Rewrite PICO-8 P8SCII button glyphs: to a numeric index when they're a
+ * btn()/btnp() argument, else to a readable ASCII token so display strings stay
+ * legible. Any other stray control byte (0x80-0x9f) is stripped and reported.
+ * @param {string} lua
+ * @returns {{ lua: string, translated: number, strays: number[] }}
+ */
+export function translateP8Glyphs(lua) {
+  let translated = 0;
+  // 1. btn(GLYPH) / btnp(GLYPH) -> btn(index). The glyph is the sole argument.
+  const btnCall = new RegExp(`\\b(btnp?)\\s*\\(\\s*(${GLYPH_CLASS})\\s*\\)`, "g");
+  let out = lua.replace(btnCall, (_m, fn, g) => {
+    translated++;
+    return `${fn}(${P8_BTN_INDEX[g.codePointAt(0)]})`;
+  });
+  // 2. any remaining button glyph (almost always inside a string) -> ASCII token
+  out = out.replace(new RegExp(GLYPH_CLASS, "g"), (g) => {
+    translated++;
+    return P8_BTN_ASCII[g.codePointAt(0)];
+  });
+  // 3. anything else in the P8SCII control range would still wreck the lexer
+  const strays = new Set();
+  out = [...out].map((ch) => {
+    const c = ch.codePointAt(0);
+    if (c >= 0x80 && c < 0xa0) { strays.add(c); return ""; }
+    return ch;
+  }).join("");
+  return { lua: out, translated, strays: [...strays] };
+}
+
+// ---- what-to-expect: name the big dialect gaps this cart actually uses -------
+// gt-lua rejects several PICO-8-isms outright. When a cart leans on one, the
+// Problems panel fills with the SAME error over and over and reads like the
+// import broke. It didn't - list the offenders up top so the errors make sense.
+// (These are lexer/parser features, not missing builtins; a missing builtin like
+//  split() just shows once as an undefined name.)
+const DIALECT_GAPS = [
+  { re: /(?<![.\w])(?:print|spr|sspr|split|add|del|foreach|music|sfx|assert|type)\s*["'{]/,
+    say: "paren-less calls like split\"a,b\" or add{...} - gt-lua needs the parens: split(\"a,b\")" },
+  { re: /\[\[[\s\S]*?\]\]/, say: "[[ long strings ]] (level grids, credits) - gt-lua has no long-string syntax; rebuild the data as a table" },
+  { re: /function\s*\(/, say: "anonymous functions / closures - define named top-level functions instead" },
+  { re: /(?<![.\w])[A-Za-z_]\w*\s*:\s*[A-Za-z_]\w*\s*\(/, say: "method calls a:b() - gt-lua has no methods; pass the object explicitly" },
+  { re: /(?<![.\w])(?:nil)(?![.\w])/, say: "nil / dynamic typing - initialize every variable with a real value" },
+  { re: /(?<![.\w])(?:split|all|foreach|del|deli|count|mget|mset|map|pal|palt|sspr|menuitem|coresume|cocreate|yield)(?![.\w])/,
+    say: "PICO-8 builtins gt-lua doesn't have (split/all/foreach/map/pal/coroutines...) - port these by hand" },
+];
+
+function dialectGaps(lua) {
+  return DIALECT_GAPS.filter((g) => g.re.test(lua)).map((g) => g.say);
+}
+
+const BANNER = (name, notes, gaps) => `-- ${name} - imported from a PICO-8 cart.
 --
 -- gt-lua is a PICO-8-FLAVORED dialect, not PICO-8: most carts need some
--- hand-porting. The Problems panel (below the emulator) points at each spot;
--- the cheatsheet tab has a "for PICO-8 users" guide for the common ones.
-${notes.map((n) => `-- NOT imported: ${n}`).join("\n")}${notes.length ? "\n" : ""}
+-- hand-porting. The graphics and sound imported fine. The Problems panel below
+-- is full of errors because this cart uses PICO-8 features gt-lua doesn't have -
+-- that's expected, not a broken import. The cheatsheet tab has a "for PICO-8
+-- users" guide.
+--
+${gaps.length ? "-- This cart uses:\n" + gaps.map((g) => `--   * ${g}`).join("\n") + "\n--\n" : ""}${notes.map((n) => `-- NOT imported: ${n}`).join("\n")}${notes.length ? "\n" : ""}
 `;
 
 /**
@@ -187,7 +256,9 @@ export function p8ToProject(text, name) {
   const quad = gfxToQuadrant(cart.gfx);
   const { sfxHex, musicHex } = sfxBankHex(cart.sfx, cart.music);
 
-  let lua = (cart.lua ?? "").replace(/\r\n/g, "\n").trimEnd() + "\n";
+  const glyphs = translateP8Glyphs((cart.lua ?? "").replace(/\r\n/g, "\n").trimEnd() + "\n");
+  let lua = glyphs.lua;
+  const gaps = dialectGaps(lua);
   // wire the converted audio in: bank locals up top, registration at the top
   // of _init (or a fresh _init when the cart has none)
   if (sfxHex) {
@@ -205,7 +276,7 @@ export function p8ToProject(text, name) {
     }
   }
 
-  const files = { "main.lua": BANNER(name, notes) + lua };
+  const files = { "main.lua": BANNER(name, notes, gaps) + lua };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
 }
@@ -347,7 +418,9 @@ export async function p8PngToProject(bytes, name) {
   const quad = romGfxQuadrant(rom);
   const { sfxHex, musicHex } = bankFromParsed(romSfx(rom), romMusic(rom));
 
-  let out = lua.replace(/\r\n/g, "\n").trimEnd() + "\n";
+  const glyphs = translateP8Glyphs(lua.replace(/\r\n/g, "\n").trimEnd() + "\n");
+  let out = glyphs.lua;
+  const gaps = dialectGaps(out);
   if (sfxHex) {
     const banks = [`local p8sfx = hexdata("${sfxHex}")`];
     const calls = ["  sfx_bank(p8sfx)"];
@@ -362,7 +435,7 @@ export async function p8PngToProject(bytes, name) {
       out = decl + `function _init()\n${calls.join("\n")}\nend\n\n` + out;
     }
   }
-  const files = { "main.lua": BANNER(name, notes) + out };
+  const files = { "main.lua": BANNER(name, notes, gaps) + out };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
 }
