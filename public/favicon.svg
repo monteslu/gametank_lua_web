@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- GameTank: chunky blue console, two face buttons (red + orange). Flat so it
+       reads sharp at 16px. Colors sampled from the real unit on gametank.zone. -->
+  <rect width="32" height="32" rx="6" fill="#0e2a4e"/>
+  <!-- console body -->
+  <g>
+    <!-- main blue slab -->
+    <rect x="5" y="7" width="22" height="18" rx="3" fill="#1354a6"/>
+    <!-- top highlight face -->
+    <rect x="5" y="7" width="22" height="6" rx="3" fill="#2f6bc0"/>
+    <!-- ridged shoulder on the right -->
+    <g fill="#0f4488">
+      <rect x="21" y="14" width="1.4" height="9"/>
+      <rect x="23" y="14" width="1.4" height="9"/>
+      <rect x="25" y="14" width="1.4" height="9"/>
+    </g>
+    <!-- cartridge slot -->
+    <rect x="9" y="9" width="9" height="3" rx="1" fill="#0c1f3a"/>
+    <!-- the two face buttons -->
+    <circle cx="12" cy="19" r="2.6" fill="#df0a1c"/>
+    <circle cx="18.5" cy="20.5" r="2.6" fill="#f9a205"/>
+  </g>
+</svg>
