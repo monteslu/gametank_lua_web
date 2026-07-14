@@ -25,9 +25,9 @@ const NICE = {
  * @param {()=>void} onClose
  */
 export function ImportMergeModal({ projectName, incoming, existing, onMerge, onNewProject, onClose }) {
-  // default: bring in everything EXCEPT project.json (merging settings is rarely
-  // what you want - you're usually dropping in an asset or code)
-  const [picked, setPicked] = useState(() => new Set(incoming.filter((p) => p !== "project.json")));
+  // default: nothing checked. Merging overwrites files, so you opt IN to each
+  // file you want to bring in rather than opting out of destruction.
+  const [picked, setPicked] = useState(() => new Set());
   const existingSet = new Set(existing);
 
   useEffect(() => {
@@ -53,8 +53,12 @@ export function ImportMergeModal({ projectName, incoming, existing, onMerge, onN
 
         <div className="merge-body">
           <p className="merge-sub">
-            Pick which files to bring into the open project. Checked files that
-            already exist will be <b>overwritten</b>.
+            Check the files to bring into the open project. Any that already
+            exist will be <b>overwritten</b>.
+            <button className="merge-all" onClick={() =>
+              setPicked((s) => (s.size === incoming.length ? new Set() : new Set(incoming)))}>
+              {picked.size === incoming.length ? "clear all" : "select all"}
+            </button>
           </p>
 
           <ul className="merge-list">
