@@ -458,6 +458,21 @@ function romGfxQuadrant(rom) {
   return any ? quad : null;
 }
 
+// The __map__ region: 128x32 tile indices at ROM 0x2000-0x2FFF (row-major, one
+// byte per cell = a sprite-sheet cell 0-255, which lines up 1:1 with gtlua's
+// spr() cell). PICO-8's "shared" bottom 32 rows (which alias the sheet's upper
+// half) are rarely used and we skip them. Returns 4096 bytes, or null if empty.
+function romMap(rom) {
+  const map = new Uint8Array(128 * 32);
+  let any = false;
+  for (let i = 0; i < map.length; i++) {
+    const b = rom[0x2000 + i];
+    if (b) any = true;
+    map[i] = b;
+  }
+  return any ? map : null;
+}
+
 /**
  * Convert a .p8.png cart into gt-lua project files.
  * @param {Uint8Array} bytes  the PNG file
@@ -475,16 +490,22 @@ export async function p8PngToProject(bytes, name) {
   if (!lua.trim()) throw new Error("no code found - not a PICO-8 cart PNG");
 
   const notes = [];
-  let hasMap = false;
-  for (let i = 0x2000; i < 0x3000; i++) if (rom[i]) { hasMap = true; break; }
-  if (hasMap) notes.push("__map__ data (gt-lua has no map()/mget - draw or compose the level yourself)");
-
   const quad = romGfxQuadrant(rom);
   const { sfxHex, musicHex } = bankFromParsed(romSfx(rom), romMusic(rom));
 
   const glyphs = translateP8Glyphs(lua.replace(/\r\n/g, "\n").trimEnd() + "\n");
   let out = glyphs.lua;
   const gaps = dialectGaps(out);
+
+  // __map__ tilemap: if the cart has map data AND calls map()/mget(), import it
+  // as the byte array those builtins read. (Skip it if the code never touches
+  // the map - no point shipping 4KB of tile indices nothing draws.)
+  const mapData = romMap(rom);
+  if (mapData && /\b(map|mget)\s*\(/.test(out)) {
+    out = `local __p8map = hexdata("${toHex(mapData)}")\n\n` + out;
+  } else if (mapData) {
+    notes.push("__map__ data present but map()/mget() isn't called - not imported");
+  }
   if (sfxHex) {
     const banks = [`local p8sfx = hexdata("${sfxHex}")`];
     const calls = ["  sfx_bank(p8sfx)"];
