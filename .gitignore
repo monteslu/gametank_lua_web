@@ -8,3 +8,6 @@ test/*.png
 public/examples/
 .tmp-test.mid
 public/docs/
+
+# CLI build scratch, if someone runs gtlua build in an example dir
+examples/*/build/
