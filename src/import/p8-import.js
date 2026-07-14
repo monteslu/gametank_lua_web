@@ -164,49 +164,51 @@ function bankFromParsed(sfx, music) {
   return { sfxHex: toHex(blob), musicHex };
 }
 
-// ---- P8SCII button glyphs ---------------------------------------------------
-// PICO-8 lets you write button indices as single-character glyphs: btn(⬅️),
-// btnp(❎), etc. On disk these are single P8SCII control bytes (0x80-0x9a), not
-// UTF-8 - our pixel->ROM->string decode surfaces them as U+0080..U+009a. gt-lua's
-// lexer has no idea what they are ("unexpected character").
-//   ⬅️ 0x8b   ➡️ 0x91   ⬆️ 0x94   ⬇️ 0x83   🅾️ 0x8e   ❎ 0x97
-// Two very different uses in real carts, so handle each precisely:
-//   1. as a btn()/btnp() ARGUMENT  -> the numeric index PICO-8 defines (exact).
-//   2. inside a display STRING ("press ❎ to start") -> its numeric value there
-//      would corrupt the on-screen text, so swap in a readable ASCII token
-//      ([O], [X], arrows) that both lexes and reads sensibly.
-const P8_BTN_INDEX = { 0x8b: "0", 0x91: "1", 0x94: "2", 0x83: "3", 0x8e: "4", 0x97: "5" };
+// ---- P8SCII button glyphs (inside strings) ----------------------------------
+// PICO-8 writes button indices as single-character glyphs: btn(left), "press X".
+// In a .p8/.p8.png cart these are single P8SCII control bytes (0x83..0x97) that
+// our pixel->ROM->string decode surfaces as U+0083..U+0097 (left=8b right=91
+// up=94 down=83 O=8e X=97). The gtlua LEXER already reads a glyph in CODE
+// position as its btn() index (0..5), so btn(<glyph>) compiles on its own. But
+// the lexer must not touch string contents, so a glyph inside a display string
+// ("press <X> to start") survives as a raw byte the GameTank font cannot render.
+// Only the importer can fix that: rewrite glyphs that sit INSIDE string literals
+// to a readable ASCII token; leave code-position glyphs for the lexer; strip any
+// other stray control byte.
 const P8_BTN_ASCII = { 0x8b: "[<]", 0x91: "[>]", 0x94: "[^]", 0x83: "[v]", 0x8e: "[O]", 0x97: "[X]" };
-// one alternation of all six glyphs, e.g. /[]/
-const GLYPH_CLASS = "[" + Object.keys(P8_BTN_INDEX).map((h) => "\\u" + (+h).toString(16).padStart(4, "0")).join("") + "]";
+const P8_BTN_INDEX = { 0x8b: "0", 0x91: "1", 0x94: "2", 0x83: "3", 0x8e: "4", 0x97: "5" };
 
 /**
- * Rewrite PICO-8 P8SCII button glyphs: to a numeric index when they're a
- * btn()/btnp() argument, else to a readable ASCII token so display strings stay
- * legible. Any other stray control byte (0x80-0x9f) is stripped and reported.
+ * Make P8SCII button glyphs readable in the imported source. In CODE position a
+ * glyph becomes its numeric btn() index (0..5) - it would otherwise sit in the
+ * text as an invisible byte (the compiler's lexer accepts either form, but a
+ * bare `btn()` reads like a bug). Inside a STRING literal a glyph becomes an
+ * ASCII token ([X], [O], arrows) so on-screen text renders on hardware. Any
+ * other stray control byte inside a string is stripped.
  * @param {string} lua
  * @returns {{ lua: string, translated: number, strays: number[] }}
  */
 export function translateP8Glyphs(lua) {
   let translated = 0;
-  // 1. btn(GLYPH) / btnp(GLYPH) -> btn(index). The glyph is the sole argument.
-  const btnCall = new RegExp(`\\b(btnp?)\\s*\\(\\s*(${GLYPH_CLASS})\\s*\\)`, "g");
-  let out = lua.replace(btnCall, (_m, fn, g) => {
-    translated++;
-    return `${fn}(${P8_BTN_INDEX[g.codePointAt(0)]})`;
-  });
-  // 2. any remaining button glyph (almost always inside a string) -> ASCII token
-  out = out.replace(new RegExp(GLYPH_CLASS, "g"), (g) => {
-    translated++;
-    return P8_BTN_ASCII[g.codePointAt(0)];
-  });
-  // 3. anything else in the P8SCII control range would still wreck the lexer
   const strays = new Set();
-  out = [...out].map((ch) => {
+  let out = "";
+  let quote = null;   // current string delimiter, or null when in code
+  for (let i = 0; i < lua.length; i++) {
+    const ch = lua[i];
     const c = ch.codePointAt(0);
-    if (c >= 0x80 && c < 0xa0) { strays.add(c); return ""; }
-    return ch;
-  }).join("");
+    if (quote) {
+      // inside a string literal: a backslash escapes the next char
+      if (ch === "\\") { out += ch + (lua[++i] ?? ""); continue; }
+      if (ch === quote) { quote = null; out += ch; continue; }
+      if (P8_BTN_ASCII[c] !== undefined) { translated++; out += P8_BTN_ASCII[c]; continue; }
+      if (c >= 0x80 && c < 0xa0) { strays.add(c); continue; }   // unprintable byte in a string
+      out += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; out += ch; continue; }
+    if (P8_BTN_INDEX[c] !== undefined) { translated++; out += P8_BTN_INDEX[c]; continue; }
+    out += ch;
+  }
   return { lua: out, translated, strays: [...strays] };
 }
 
@@ -216,12 +218,14 @@ export function translateP8Glyphs(lua) {
 // import broke. It didn't - list the offenders up top so the errors make sense.
 // (These are lexer/parser features, not missing builtins; a missing builtin like
 //  split() just shows once as an undefined name.)
+// Only flag what gt-lua genuinely does NOT support. (Paren-less string/table
+// calls, [[long strings]], and button glyphs all compile now - the compiler
+// handles them - so they're deliberately not listed.)
 const DIALECT_GAPS = [
-  { re: /(?<![.\w])(?:print|spr|sspr|split|add|del|foreach|music|sfx|assert|type)\s*["'{]/,
-    say: "paren-less calls like split\"a,b\" or add{...} - gt-lua needs the parens: split(\"a,b\")" },
-  { re: /\[\[[\s\S]*?\]\]/, say: "[[ long strings ]] (level grids, credits) - gt-lua has no long-string syntax; rebuild the data as a table" },
   { re: /function\s*\(/, say: "anonymous functions / closures - define named top-level functions instead" },
   { re: /(?<![.\w])[A-Za-z_]\w*\s*:\s*[A-Za-z_]\w*\s*\(/, say: "method calls a:b() - gt-lua has no methods; pass the object explicitly" },
+  { re: /\{\s*(?:\[|["'\d-]|\{|[A-Za-z_]\w*\s*[,}])/,
+    say: "array / computed-key tables ({1,2,3} or {[k]=v}) - gt-lua tables are structs with named fields ({x=1, y=2})" },
   { re: /(?<![.\w])(?:nil)(?![.\w])/, say: "nil / dynamic typing - initialize every variable with a real value" },
   { re: /(?<![.\w])(?:split|all|foreach|del|deli|count|mget|mset|map|pal|palt|sspr|menuitem|coresume|cocreate|yield)(?![.\w])/,
     say: "PICO-8 builtins gt-lua doesn't have (split/all/foreach/map/pal/coroutines...) - port these by hand" },
