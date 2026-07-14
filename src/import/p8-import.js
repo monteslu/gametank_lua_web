@@ -374,13 +374,19 @@ function dialectGaps(lua) {
 
 const BANNER = (name, notes, gaps) => `-- ${name} - imported from a PICO-8 cart.
 --
--- gt-lua is a PICO-8-FLAVORED dialect, not PICO-8: most carts need some
--- hand-porting. The graphics and sound imported fine. The Problems panel below
--- is full of errors because this cart uses PICO-8 features gt-lua doesn't have -
--- that's expected, not a broken import. The cheatsheet tab has a "for PICO-8
--- users" guide.
+-- gt-lua is a PICO-8-FLAVORED dialect for real GameTank hardware, not PICO-8:
+-- the art and sound imported fine, but the CODE usually needs hand-porting.
+-- Errors in the Problems panel are EXPECTED, not a broken import - they mark
+-- the PICO-8 features that don't map to a static, no-GC 6502.
 --
-${gaps.length ? "-- This cart uses:\n" + gaps.map((g) => `--   * ${g}`).join("\n") + "\n--\n" : ""}${notes.map((n) => `-- NOT imported: ${n}`).join("\n")}${notes.length ? "\n" : ""}
+-- The 3 things to rewrite (see the Cheatsheet tab -> "For PICO-8 users" and
+-- "Porting a game"):
+--   * closures / metatable OOP / coroutines -> named functions + a 'kind'
+--     field + if/elseif state machines
+--   * dynamic tables -> pool(n) / add / del / all, or a fixed array(n)
+--   * pal() recoloring -> pick GameTank palette bytes up front (no live CLUT)
+--
+${gaps.length ? "-- This cart specifically uses:\n" + gaps.map((g) => `--   * ${g}`).join("\n") + "\n--\n" : ""}${notes.map((n) => `-- NOT imported: ${n}`).join("\n")}${notes.length ? "\n" : ""}
 `;
 
 /**

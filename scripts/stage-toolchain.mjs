@@ -182,8 +182,18 @@ console.log("staged examples -> public/examples (" + examples.map((e) => e.name)
 const DOCS_OUT = path.join(HERE, "public", "docs");
 await rm(DOCS_OUT, { recursive: true, force: true });
 await mkdir(DOCS_OUT, { recursive: true });
-const cheat = path.join(GTLUA, "docs", "CHEATSHEET.md");
-if (existsSync(cheat)) {
-  await cp(cheat, path.join(DOCS_OUT, "CHEATSHEET.md"));
-  console.log("staged cheatsheet -> public/docs/CHEATSHEET.md");
+// Stage the whole gt-lua docs folder (top-level *.md) so every in-app link
+// resolves: the cheatsheet, the PICO-8-porter guides it links to, and THEIR
+// cross-links (GRAPHICS/SPRITES/PALETTE/MUSIC/...). The importer banner + the
+// cheatsheet footer point users at these, so a missing one is a 404. Small
+// (~90KB total) and always matches the installed compiler.
+const DOCS_SRC = path.join(GTLUA, "docs");
+const staged = [];
+if (existsSync(DOCS_SRC)) {
+  for (const f of await readdir(DOCS_SRC)) {
+    if (!f.endsWith(".md")) continue;               // top-level markdown only
+    await cp(path.join(DOCS_SRC, f), path.join(DOCS_OUT, f));
+    staged.push(f);
+  }
 }
+if (staged.length) console.log(`staged docs -> public/docs (${staged.length} md files)`);
