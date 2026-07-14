@@ -137,7 +137,7 @@ export class WebSerialFlasher {
       this.log("verifying…");
       // (checksum per bank could go here; left as a follow-up)
     }
-    this.log("done — unplug and run it on your GameTank.");
+    this.log("done. Unplug and run it on your GameTank.");
   }
 
   async close() {

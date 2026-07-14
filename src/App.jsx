@@ -738,7 +738,7 @@ export function App() {
             )}
             <div className="flash-status">
               {flash.error ? <span className="err">{flash.error}</span>
-                : flash.running ? `${flash.label} — ${flash.done}/${flash.total} blocks`
+                : flash.running ? `${flash.label}: ${flash.done}/${flash.total} blocks`
                 : "done ✓"}
             </div>
             <div className="flash-log">{flash.log.map((l, i) => <div key={i}>{l}</div>)}</div>
