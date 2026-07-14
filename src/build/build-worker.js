@@ -207,6 +207,12 @@ async function buildCart(source, opts = {}) {
   progress("warming tools");
   await warmup();
 
+  // Ring of the last few tool diagnostics (cc65/ca65/ld65 stderr). build() routes
+  // real link/compile errors through env.warn just before it throws a terse
+  // "<tool> failed (exit N)" - keep the last messages so we can attach the actual
+  // cause to the thrown error (otherwise the true reason is invisible in the UI).
+  const diag = [];
+
   const vfs = new Map(sdkFiles);              // warm SDK runtime, cloned per build
   const projectKey = typeof opts.projectKey === "string" ? opts.projectKey : "";
   const replay = projectKey && replayCache.get(projectKey);
@@ -306,7 +312,7 @@ async function buildCart(source, opts = {}) {
     asminc: "/cc65/asminc",
     hash: fnv1aHex,
     log: (m) => progress(String(m)),
-    warn: () => {},   // cc65 warnings are expected noise; real failures throw from build()
+    warn: (m) => { const s = String(m).trim(); if (s) { diag.push(s); if (diag.length > 8) diag.shift(); } },
     debug: false,
     runTool,
   };
@@ -314,7 +320,16 @@ async function buildCart(source, opts = {}) {
   const sheetPath = hasSheet ? "/work/gfx.gtg" : undefined;
   const framesPath = opts.framesBytes ? "/work/gfx.gsi" : undefined;
   const gtrPath = "/work/game.gtr";
-  await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath, songsPaths }, env);
+  try {
+    await build("/work/main.lua", { outPath: gtrPath, sheetPath, num8: !!opts.num8, framesPath, songsPaths }, env);
+  } catch (err) {
+    // build()'s message is terse ("ld65 failed (exit 1)"); the real cc65/ld65
+    // diagnostic went through env.warn just before. Attach it so the UI + tests
+    // show WHY, not just THAT, the build failed.
+    const detail = diag.join("\n").trim();
+    if (detail) err.message = `${err.message}\n${detail}`;
+    throw err;
+  }
 
   const gtr = vfs.get(gtrPath);
   // harvest the winning placement for this project's next one-pass replay

@@ -32,8 +32,10 @@ try {
     await page.waitForSelector(".newproj-grid", { timeout: 30000 });
     await page.locator(".newproj-card", { hasText: g }).locator("button.newproj-clone").click();
     await page.waitForTimeout(300);
-    const src = await page.evaluate(() => window.__gtlua_test.getSource());
-    const r = await page.evaluate((s) => window.__gtlua_test.build(s).then((b) => ({ ok: b.ok, len: b.gtr ? b.gtr.byteLength : 0 })).catch((e) => ({ ok: false, err: e.message })), src);
+    // Build the cloned example WITH its assets (sheet + frame table + songs) -
+    // shmup/platformer draw with sprf() and won't link without gfx.gsi/gfx.gtg.
+    // buildCurrent() passes exactly what the Play button does.
+    const r = await page.evaluate(() => window.__gtlua_test.buildCurrent().then((b) => ({ ok: b.ok, len: b.gtr ? b.gtr.byteLength : 0 })).catch((e) => ({ ok: false, err: e.message })));
     // a valid cart is EEPROM32K (32768) or, if it overflows, FLASH2M (2 MB) -
     // the puzzle's larger port re-targets to FLASH2M, which is still valid.
     check(`${g} builds a valid cart`, r.ok && (r.len === 32768 || r.len === 2097152));

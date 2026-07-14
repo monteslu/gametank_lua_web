@@ -152,7 +152,18 @@ export function App() {
     window.__gtlua_test.setSource = (t) => onChange(t);
     window.__gtlua_test.getSource = () => source;
     window.__gtlua_test.getHost = () => host;
-  }, [onChange, source, host]);
+    // Build the CURRENT project WITH its assets (sheet/frames/songs) - the same
+    // inputs play() passes. A raw build(source) drops the sheet+frames, so an
+    // asset-dependent game (sprf/gt_gspr_frame) links to unresolved externals.
+    // Tests that build a real example must go through this, not build(source).
+    window.__gtlua_test.buildCurrent = () => buildGtr(source, {
+      num8,
+      quadrantBytes: sheet ? splitSheet(sheet) : undefined,
+      framesBytes: frames && frames.length ? encodeGsi(frames).buffer : undefined,
+      songs: songs && songs.length ? songs.map((s) => songToBytes(s.model)) : undefined,
+      projectKey: String(currentId ?? ""),
+    });
+  }, [onChange, source, host, sheet, frames, songs, num8, currentId]);
 
   // Write a 256x256 sheet into a project record as quadrant files: present
   // quadrants (splitSheet omits empty NE/SW/SE) are written, and any quadrant
