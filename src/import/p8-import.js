@@ -11,7 +11,51 @@
 // What doesn't: __map__ (gt-lua has no map()/mget), pal()/sspr()/metatables
 // and other dialect gaps - the Problems panel points at each one.
 import { P8_PALETTE } from "gtlua/compiler/builtins.js";
+import { compile } from "gtlua/compiler/index.js";
 import { decodePngExact } from "./png-exact.js";
+
+// ---- implicit-global hoisting ----------------------------------------------
+// PICO-8 makes any un-`local` assignment a GLOBAL, visible from every function;
+// a game sets dozens of them inside _init() and reads them everywhere. gtlua has
+// no implicit globals - each must be declared `local` at top level - so an
+// unported cart shows the SAME "X is not declared" hundreds of times (peeeko:
+// 974 of 1002 errors from 93 such names). Auto-declare them: compile, collect
+// the exact names the compiler reports undeclared, prepend `local name = 0` for
+// each, and repeat to a fixed point. Using the compiler's own diagnostics means
+// we only ever hoist a real undeclared read/write - never a field, builtin, or
+// already-local - so it can't over-declare.
+export function hoistImplicitGlobals(lua) {
+  let out = lua;
+  const declared = new Set();
+  for (let pass = 0; pass < 5; pass++) {
+    let errs;
+    try {
+      errs = compile(out, "main.lua").diagnostics;
+    } catch {
+      break;   // a parse-level failure the hoist can't help; leave as-is
+    }
+    const fresh = [];
+    for (const d of errs) {
+      if (d.severity !== "error" || !/is not declared/.test(d.message)) continue;
+      const m = d.message.match(/'([^']+)'/);
+      if (!m) continue;
+      const name = m[1];
+      // plain identifiers only (never a member like a.b, never already done)
+      if (!/^[A-Za-z_]\w*$/.test(name) || declared.has(name)) continue;
+      declared.add(name);
+      fresh.push(name);
+    }
+    if (!fresh.length) break;
+    const block = "-- auto-declared PICO-8 implicit globals (set without 'local')\n" +
+      fresh.map((n) => `local ${n} = 0`).join("\n") + "\n\n";
+    // insert after the leading comment/blank banner, before the first real line
+    const lines = out.split("\n");
+    let i = 0;
+    while (i < lines.length && (lines[i] === "" || lines[i].startsWith("--"))) i++;
+    out = lines.slice(0, i).join("\n") + (i ? "\n" : "") + block + lines.slice(i).join("\n");
+  }
+  return { lua: out, count: declared.size };
+}
 
 // ---- section splitting ------------------------------------------------------
 const SECTIONS = ["lua", "gfx", "gff", "label", "map", "sfx", "music"];
@@ -292,6 +336,7 @@ export function p8ToProject(text, name) {
     }
   }
 
+  ({ lua } = hoistImplicitGlobals(lua));
   const files = { "main.lua": BANNER(name, notes, gaps) + lua };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
@@ -451,6 +496,7 @@ export async function p8PngToProject(bytes, name) {
       out = decl + `function _init()\n${calls.join("\n")}\nend\n\n` + out;
     }
   }
+  ({ lua: out } = hoistImplicitGlobals(out));
   const files = { "main.lua": BANNER(name, notes, gaps) + out };
   if (quad) files["gfx.gtg"] = quad;
   return { files, notes };
