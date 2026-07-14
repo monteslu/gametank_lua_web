@@ -28,7 +28,8 @@ try {
   await page.waitForTimeout(800);
 
   for (const g of GENRES) {
-    await page.click(".side-new");
+    await page.evaluate(() => document.querySelector(".newproj-grid") || document.querySelector(".side-new")?.click());
+    await page.waitForSelector(".newproj-grid", { timeout: 30000 });
     await page.locator(".newproj-card", { hasText: g }).locator("button.newproj-clone").click();
     await page.waitForTimeout(300);
     const src = await page.evaluate(() => window.__gtlua_test.getSource());
@@ -40,7 +41,8 @@ try {
   }
 
   // run one (shmup) and confirm it renders a scene (not black)
-  await page.click(".side-new");
+  await page.evaluate(() => document.querySelector(".newproj-grid") || document.querySelector(".side-new")?.click());
+  await page.waitForSelector(".newproj-grid", { timeout: 30000 });
   await page.locator(".newproj-card", { hasText: "shmup" }).locator("button.newproj-clone").click();
   await page.waitForTimeout(300);
   await page.click("button.play");

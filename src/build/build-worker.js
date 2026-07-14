@@ -82,6 +82,15 @@ async function idbReadAll(db, store, into) {
 async function idbClearAll(db) {
   await Promise.all(["cc", "replay", "meta"].map((s) => idbReq(db.transaction(s, "readwrite").objectStore(s).clear())));
 }
+// a stored replay must be a real placement document - a garbage entry does
+// not just fail to replay, its mere PRESENCE in the VFS routes small carts
+// into the FLASH2M pipeline (build's overflows-32K hint is file existence)
+function validReplay(u8) {
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(u8));
+    return !!(parsed && typeof parsed === "object" && parsed.placement);
+  } catch { return false; }
+}
 const dirtyCC = new Map(), dirtyReplay = new Map();
 function persistDirty() {          // fire-and-forget after each build
   if (!dirtyCC.size && !dirtyReplay.size) return;
@@ -109,6 +118,13 @@ async function loadPersistedCaches() {
   else {
     await idbReadAll(db, "cc", compileCache);
     await idbReadAll(db, "replay", replayCache);
+    // self-heal: drop poisoned entries (the SPA-fallback bug stored HTML)
+    for (const [k, v] of [...replayCache]) {
+      if (!validReplay(v)) {
+        replayCache.delete(k);
+        db.transaction("replay", "readwrite").objectStore("replay").delete(k);
+      }
+    }
     if (compileCache.size > CC_CAP) {
       compileCache.clear();
       await idbReq(db.transaction("cc", "readwrite").objectStore("cc").clear());
@@ -329,6 +345,7 @@ self.onmessage = async (e) => {
     const { projectKey, bytes } = e.data;
     if (typeof projectKey === "string" && projectKey && bytes && !replayCache.has(projectKey)) {
       const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      if (!validReplay(u8)) return;   // never store a non-placement (SPA fallback HTML etc.)
       replayCache.set(projectKey, u8);
       dirtyReplay.set(projectKey, u8);
       persistDirty();

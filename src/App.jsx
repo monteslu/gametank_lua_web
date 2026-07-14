@@ -471,6 +471,24 @@ export function App() {
     } catch { /* best-effort warmer; Play reports real errors */ }
   }, [warm, currentId, building, errors.length, source, sheet, frames, songs, num8]);
 
+  // The emulator grabs keyboard focus while you play (so d-pad/A/B reach the
+  // game). Clicking any editor pane must hand that focus back, or game keys
+  // keep leaking into the sprite/music editors. A capture-phase pointerdown
+  // blurs the emulator screen whenever you press outside it - runs before the
+  // target's own handler, so a preventDefault there (the sprite canvas) can't
+  // stop the blur.
+  useEffect(() => {
+    const onDown = (e) => {
+      const active = document.activeElement;
+      if (active && active.closest && active.closest(".emu-screen") &&
+          !(e.target.closest && e.target.closest(".emu-screen"))) {
+        active.blur();
+      }
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, []);
+
   // Ctrl-R / Cmd-R = play (the sacred loop)
   useEffect(() => {
     const onKey = (e) => {

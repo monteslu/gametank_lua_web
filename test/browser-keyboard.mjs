@@ -25,6 +25,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "domcontentloaded" });
+
+  // first run auto-opens the New Project dialog: clone the hello example so
+  // the test has an open project (the old seeded-hello baseline)
+  await page.waitForSelector(".newproj-grid", { timeout: 30000 });
+  await page.locator(".newproj-card", { hasText: "hello" }).locator("button.newproj-clone").click();
+  await page.waitForSelector(".monaco-editor", { timeout: 30000 });
   await page.waitForSelector(".sidebar");
   await page.waitForSelector(".monaco-editor", { timeout: 15000 });
 

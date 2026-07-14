@@ -33,6 +33,12 @@ try {
   page.on("console", (m) => { if (m.type() === "error") console.log("[err]", m.text().slice(0, 200)); });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 200)));
   await page.goto(URL_, { waitUntil: "domcontentloaded" });
+
+  // first run auto-opens the New Project dialog: clone the hello example so
+  // the test has an open project (the old seeded-hello baseline)
+  await page.waitForSelector(".newproj-grid", { timeout: 30000 });
+  await page.locator(".newproj-card", { hasText: "hello" }).locator("button.newproj-clone").click();
+  await page.waitForSelector(".monaco-editor", { timeout: 30000 });
   await page.waitForFunction(() => window.__gtlua_test?.build, { timeout: 15000 });
 
   const result = await page.evaluate(async ({ src, sheetB64 }) => {

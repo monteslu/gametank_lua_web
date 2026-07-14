@@ -23,7 +23,7 @@ export async function launch(game) {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".sidebar");
   await page.waitForTimeout(1000);
-  await page.click(".side-new");
+  await page.waitForSelector(".newproj-grid", { timeout: 30000 });   // auto-opens on first run
   await page.locator(".newproj-card", { hasText: game }).locator("button.newproj-clone").click();
   await page.waitForTimeout(500);
   await page.click("button.play");

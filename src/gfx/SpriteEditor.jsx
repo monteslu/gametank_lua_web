@@ -339,6 +339,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
     const p = pixelAt(e);
     if (!p) return;
     e.preventDefault();
+    rootRef.current?.focus();   // take keyboard ownership from the emulator
     // eyedropper: pick the color under the cursor, don't paint (no undo entry)
     if (tool === "dropper") {
       setColor(getPixel(sheet, p.x, p.y));
@@ -412,7 +413,12 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   const rootRef = useRef(null);
   useEffect(() => {
     const onKey = (e) => {
-      if (!rootRef.current || !rootRef.current.contains(document.activeElement) && !rootRef.current.matches(":hover")) return;
+      // gate on FOCUS, not hover: the emulator grabs focus while you play, and
+      // an app-level handler blurs it the moment you click any editor pane. So
+      // "sprite pane owns the keyboard" == it contains the focused element.
+      // (Hover is not a keyboard-ownership signal - that let game keys leak in
+      // while the emulator was focused and the mouse merely rested here.)
+      if (!rootRef.current || !rootRef.current.contains(document.activeElement)) return;
       const k = e.key.toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) {
@@ -494,7 +500,7 @@ export function SpriteEditor({ sheet, onChange, onImportAnimation }) {
   }, [sheet]);
 
   return (
-    <div className="sprite-editor" ref={rootRef}>
+    <div className="sprite-editor" ref={rootRef} tabIndex={-1}>
       <div className="sprite-toolbar">
         {TOOLS.map((t) => (
           <button

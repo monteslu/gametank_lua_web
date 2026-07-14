@@ -28,6 +28,12 @@ try {
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 200)));
   await page.goto(URL_, { waitUntil: "domcontentloaded" });
 
+  // first run auto-opens the New Project dialog: clone the hello example so
+  // the test has an open project (the old seeded-hello baseline)
+  await page.waitForSelector(".newproj-grid", { timeout: 30000 });
+  await page.locator(".newproj-card", { hasText: "hello" }).locator("button.newproj-clone").click();
+  await page.waitForSelector(".monaco-editor", { timeout: 30000 });
+
   // click Play
   await page.waitForSelector("button.play", { timeout: 15000 });
   await page.click("button.play");

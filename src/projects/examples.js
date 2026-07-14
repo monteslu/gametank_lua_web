@@ -34,6 +34,13 @@ export async function loadExamplePlacement(example) {
   try {
     const res = await fetch(`${BASE}/${example.name}/placement.json`);
     if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
+    // dev servers answer missing files with index.html + 200 (SPA fallback);
+    // seeding THAT as a placement made every small example build as a 2 MB
+    // FLASH2M cart (the build treats the file's existence as the
+    // overflows-32K hint). Only accept a real placement document.
+    const text = await res.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || !parsed.placement) return null;
+    return new TextEncoder().encode(text);
   } catch { return null; }
 }

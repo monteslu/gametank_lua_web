@@ -117,7 +117,12 @@ export function MusicEditor({ song, onChange }) {
   useEffect(() => {
     const editing = () => {
       const el = document.activeElement;
-      return el && (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (!el) return false;
+      // don't edit while a text field OR the emulator screen holds focus: the
+      // game owns the keyboard while you play, and an app-level handler blurs
+      // it the moment you click the music pane.
+      if (el.closest && el.closest(".emu-screen")) return true;
+      return el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA" || el.isContentEditable;
     };
     const onDown = (e) => {
       if (editing() || e.ctrlKey || e.metaKey || e.altKey) return;

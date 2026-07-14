@@ -50,7 +50,7 @@ try {
 
   // clone the orbit example -> it opens as a new project with its source
   await page.locator(".newproj-card", { hasText: "orbit" }).locator("button.newproj-clone").click();
-  await page.waitForFunction(() => document.querySelector(".proj-name")?.value === "orbit", { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector(".side-list li.active .side-item")?.textContent === "orbit", { timeout: 5000 });
   const editorHasOrbit = await page.evaluate(() => { const s = window.__gtlua_test.getSource() || ""; return s.includes("_update") || s.length > 200; });
   check("forking orbit opened it", editorHasOrbit);
 
