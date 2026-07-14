@@ -19,9 +19,11 @@ export const GT_INPUTS = [
   { key: "DOWN", label: "Down", pad: PAD.DOWN },
   { key: "LEFT", label: "Left", pad: PAD.LEFT },
   { key: "RIGHT", label: "Right", pad: PAD.RIGHT },
-  { key: "A", label: "A", pad: PAD.A },
-  { key: "B", label: "B", pad: PAD.B },
-  { key: "C", label: "C", pad: PAD.Y },   // GameTank C = the core's Y button
+  // the core maps GameTank A/B/C from RetroPad B/Y/A (gametank-libretro
+  // poll_pad), so these send those RetroPad ids
+  { key: "A", label: "A", pad: PAD.B },
+  { key: "B", label: "B", pad: PAD.Y },
+  { key: "C", label: "C", pad: PAD.A },
   { key: "START", label: "Start", pad: PAD.START },
 ];
 

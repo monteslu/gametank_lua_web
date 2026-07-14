@@ -20,9 +20,12 @@ const RETRO_PIXEL_FORMAT_RGB565 = 2;
 // libretro RetroPad button ids (what retro_set_input_state is queried with)
 export const PAD = { B: 0, Y: 1, SELECT: 2, START: 3, UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7, A: 8, X: 9 };
 
-// gt-lua btn(n) index -> the RetroPad id the core expects.
+// gt-lua btn(n) index -> the RetroPad id the CORE maps to that GameTank button.
+// The core (gametank-libretro poll_pad) wires: GameTank A <- RetroPad B,
+// GameTank B <- RetroPad Y, GameTank C <- RetroPad A. So gt-lua's A/B/C
+// (btn 4/5/6) must send RetroPad B/Y/A, NOT A/B/Y.
 //   0 UP  1 DOWN  2 LEFT  3 RIGHT  4 A  5 B  6 C  7 START
-export const GT_BTN = [PAD.UP, PAD.DOWN, PAD.LEFT, PAD.RIGHT, PAD.A, PAD.B, PAD.Y, PAD.START];
+export const GT_BTN = [PAD.UP, PAD.DOWN, PAD.LEFT, PAD.RIGHT, PAD.B, PAD.Y, PAD.A, PAD.START];
 
 let factoryPromise = null;
 // Load + env-flip the core glue once (cached for the page's life).

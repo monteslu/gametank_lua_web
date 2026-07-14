@@ -3,11 +3,11 @@ import { GameTankHost, PAD } from "./gametank-host.js";
 import { GT_INPUTS, pollGamepads, firstUnmapped } from "./gamepad.js";
 import { GamepadMapper } from "./GamepadMapper.jsx";
 
-// Keyboard -> RetroPad, matching gtlua-run.mjs (arrows move; Z/X/C = the three
-// face buttons A/B/C; Enter = start; RShift = select).
+// Keyboard -> RetroPad. Z/X/C are the GameTank A/B/C face buttons, but the core
+// maps GameTank A/B/C from RetroPad B/Y/A (see GT_BTN), so Z/X/C send those.
 const KEYMAP = {
   ArrowUp: PAD.UP, ArrowDown: PAD.DOWN, ArrowLeft: PAD.LEFT, ArrowRight: PAD.RIGHT,
-  KeyZ: PAD.A, KeyX: PAD.B, KeyC: PAD.Y, Enter: PAD.START, ShiftRight: PAD.SELECT,
+  KeyZ: PAD.B, KeyX: PAD.Y, KeyC: PAD.A, Enter: PAD.START, ShiftRight: PAD.SELECT,
 };
 
 /**
