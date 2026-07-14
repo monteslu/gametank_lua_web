@@ -12,6 +12,7 @@ import { RamViewer } from "./emu/RamViewer.jsx";
 import { WebSerialFlasher, webSerialAvailable } from "./flash/web-serial-flasher.js";
 import { Sidebar } from "./projects/Sidebar.jsx";
 import { NewProjectModal, BLANK_SOURCE } from "./projects/NewProjectModal.jsx";
+import { ImportMergeModal } from "./projects/ImportMergeModal.jsx";
 import { listProjects, getProject, createProject, saveProject, deleteProject } from "./projects/store.js";
 import { loadExampleFiles, loadExamplePlacement } from "./projects/examples.js";
 import { zipStore, unzip } from "./projects/zip.js";
@@ -351,6 +352,7 @@ export function App() {
   // --- project ops ---------------------------------------------------------
   const [showNew, setShowNew] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);   // { id, name } awaiting the user's ok
+  const [mergeImport, setMergeImport] = useState(null);       // { norm, fileName, incoming, existing } while choosing merge vs new
   useEffect(() => {
     if (!confirmDelete) return;
     const onKey = (e) => { if (e.key === "Escape") setConfirmDelete(null); };
@@ -531,16 +533,17 @@ export function App() {
   const exportBundle = useCallback(async () => {
     const rec = currentId ? await getProject(currentId) : { files: { "main.lua": source } };
     const files = { ...rec.files };
-    // ship a complete, normalized project.json (title/entry/romname/num8) so the
-    // bundle re-imports cleanly here AND is a valid GameTank-shaped project file.
+    // A project export is just a plain .zip of its files (main.lua + assets +
+    // a normalized project.json). Nothing proprietary - unzip it with anything,
+    // and re-import here. (.gtlua exports still import too, for old files.)
     const m = readManifest(files["project.json"], projectName);
     files["project.json"] = writeManifest(m);
     const zip = zipStore(files);
-    downloadBytes(`${m.romname ? m.romname.replace(/\.gtr$/i, "") : projectName || "project"}.gtlua`, zip, "application/zip");
+    downloadBytes(`${m.romname ? m.romname.replace(/\.gtr$/i, "") : projectName || "project"}.zip`, zip, "application/zip");
   }, [currentId, source, projectName]);
 
   const importBundle = useCallback(async () => {
-    const picked = await pickFile(".gtlua,.zip,.p8,.png");
+    const picked = await pickFile(".zip,.gtlua,.p8,.png");
     if (!picked) return;
     // a PICO-8 cart (text .p8 or steganographic .p8.png): convert code + gfx +
     // sfx/music into a new project. Invalid files fail with a clear message.
@@ -564,15 +567,39 @@ export function App() {
     for (const [p, bytes] of Object.entries(files)) {
       norm[p] = (p.endsWith(".lua") || p.endsWith(".json")) ? dec.decode(bytes) : bytes;
     }
-    const fileName = picked.name.replace(/\.(gtlua|zip)$/i, "");
-    // read (or default) the manifest, then KEEP it - the project name comes from
-    // its title, and its build settings (num8) survive the round-trip. A bundle
-    // with no manifest (or a legacy {name,entry} one) gets a fresh valid one.
+    const fileName = picked.name.replace(/\.(zip|gtlua)$/i, "");
+    // a project is open -> ask whether to merge the files in or make a new one
+    if (currentId) {
+      const rec = await getProject(currentId);
+      setMergeImport({ norm, fileName, incoming: Object.keys(norm), existing: Object.keys(rec?.files ?? {}) });
+      return;
+    }
+    await createProjectFromFiles(norm, fileName);
+  }, [refreshProjects, openProject, currentId]);
+
+  // Create a new project from a set of imported files (the whole zip). Shared by
+  // the no-project-open path and the merge modal's "import as new" button.
+  const createProjectFromFiles = useCallback(async (norm, fileName) => {
     const manifest = ensureManifest(norm, fileName);
     const rec = await createProject(manifest.title || fileName, norm, Date.now());
     await refreshProjects();
     await openProject(rec.id);
+    setMergeImport(null);
   }, [refreshProjects, openProject]);
+
+  // Merge selected imported files into the OPEN project, overwriting matches.
+  const mergeFilesIntoCurrent = useCallback(async (paths) => {
+    if (!currentId || !mergeImport) return;
+    const rec = await getProject(currentId);
+    if (!rec) { setMergeImport(null); return; }
+    const files = { ...rec.files };
+    for (const p of paths) files[p] = mergeImport.norm[p];
+    rec.files = files;
+    await saveProject(rec, Date.now());
+    setMergeImport(null);
+    await refreshProjects();
+    await openProject(currentId);   // reload editors/sheet/music from the merged files
+  }, [currentId, mergeImport, refreshProjects, openProject]);
 
   return (
     <div className="ide">
@@ -583,8 +610,8 @@ export function App() {
           {building ? "building..." : warm ? "▶ Play" : "warming up..."}
         </button>
         <button className="tb-btn" onClick={downloadGtr} disabled={!rom} title="download the built .gtr cart">.gtr</button>
-        <button className="tb-btn" onClick={importBundle} title="import a .gtlua bundle or a PICO-8 .p8 cart">import</button>
-        <button className="tb-btn" onClick={exportBundle} disabled={!currentId} title="export project as .gtlua">export</button>
+        <button className="tb-btn" onClick={importBundle} title="import a project .zip or a PICO-8 .p8 cart">import</button>
+        <button className="tb-btn" onClick={exportBundle} disabled={!currentId} title="export project as a .zip">export</button>
         {webSerialAvailable() && (
           <button className="tb-btn flash" onClick={flashToCart} disabled={!rom} title="flash the built cart to real GameTank hardware over USB">⚡ flash</button>
         )}
@@ -603,6 +630,16 @@ export function App() {
           onNew={() => setShowNew(true)}
           onDelete={(id) => setConfirmDelete(projects.find((p) => p.id === id) ?? { id, name: "this project" })}
         />
+        {mergeImport && (
+          <ImportMergeModal
+            projectName={projectName}
+            incoming={mergeImport.incoming}
+            existing={mergeImport.existing}
+            onMerge={mergeFilesIntoCurrent}
+            onNewProject={() => createProjectFromFiles(mergeImport.norm, mergeImport.fileName)}
+            onClose={() => setMergeImport(null)}
+          />
+        )}
         {confirmDelete && (
           <div className="flash-modal" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
             <div className="confirm-box">

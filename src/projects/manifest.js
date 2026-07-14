@@ -3,8 +3,8 @@
 // GameTank's official C SDK uses a project.json ({title, romname, progbanks,
 // modules}); a gtlua project follows that shape so it's recognizable to GameTank
 // devs, and adds the fields the Lua toolchain needs (entry, num8). Unlike a
-// PICO-8 `.p8` (one text blob with code+gfx+sfx+music stuffed inside), a .gtlua
-// project is a clean multi-file bundle - main.lua, gfx.gtg, gfx.gsi, music.json -
+// PICO-8 `.p8` (one text blob with code+gfx+sfx+music stuffed inside), a
+// project .zip is a clean multi-file bundle - main.lua, gfx.gtg, gfx.gsi, music.json -
 // and project.json is the manifest that names the pieces and holds the build
 // settings. This module is the single source of truth for that file: every
 // entry point (new / fork / import / open / export) reads and writes through

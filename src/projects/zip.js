@@ -1,5 +1,5 @@
-// zip.js - minimal ZIP reader/writer (STORE method, no compression) for the
-// .gtlua project bundle. Dependency-free; projects are small and the assets
+// zip.js - minimal ZIP reader/writer (STORE method, no compression) for
+// project .zip bundles (export/import). Dependency-free; projects are small and the assets
 // (.gtg/.gsi) are already compact, so stored entries are fine and keep the
 // bundle trivially inspectable. If we ever want deflate we can route through the
 // SDK's codec, but STORE is the honest, simplest canonical form for v1.
