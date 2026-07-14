@@ -106,9 +106,11 @@ console.log("staged GameTank core -> public/core (gametank_libretro.js + .wasm)"
 const EX_OUT = path.join(HERE, "public", "examples");
 const SDK_EX = path.join(GTLUA, "examples");
 const LOCAL_EX = path.join(HERE, "examples");
-// The three real PICO-8 ports live in a sibling repo. They're full games (big
-// banked carts, licensed), staged with their LICENSE so the attribution ships.
-const PORTS = path.join(path.dirname(HERE), "gtlua-ports");
+// The three PICO-8 ports are FULL games (big banked carts, licensed). They're
+// vendored in-repo under examples/ (like the genre games) - NOT pulled from a
+// sibling repo - so they always ship, whatever the build machine has checked
+// out. (They used to come from ../gtlua-ports and silently vanished from a
+// deploy where that sibling wasn't present.)
 // order = gallery order. `from` picks the source tree. `num8` marks a project
 // that must build in the 8.8 number model; `license` carries a credit line.
 const EX_LIST = [
@@ -119,9 +121,9 @@ const EX_LIST = [
   { name: "racing", from: LOCAL_EX, blurb: "Top-down racer. Dodge traffic, keep on the road." },
   { name: "sports", from: LOCAL_EX, blurb: "2-player paddle-ball. First to the corner wins." },
   // real ported games (heavier - first build takes ~10-15s, banked 2 MB carts)
-  { name: "cherry-bomb", from: PORTS, blurb: "Cherry Bomb by Krystman / Lazy Devs (PICO-8 port). CC-BY-NC-SA.", license: "Cherry Bomb (c) Krystman / Lazy Devs Academy - CC-BY-NC-SA 4.0" },
-  { name: "combo-pool", from: PORTS, num8: true, blurb: "Combo Pool by NuSan (PICO-8 port). Merge balls, chain combos. CC-BY-NC-SA.", license: "Combo Pool (c) NuSan - CC-BY-NC-SA 4.0" },
-  { name: "newleste", from: PORTS, blurb: "Celeste Classic (newleste.p8 port). Climb, jump, dash. GPL-3.0.", license: "Celeste Classic / newleste.p8 - Maddy Thorson, Noel Berry + CelesteClassic community - GPL-3.0" },
+  { name: "cherry-bomb", from: LOCAL_EX, blurb: "Cherry Bomb by Krystman / Lazy Devs (PICO-8 port). CC-BY-NC-SA.", license: "Cherry Bomb (c) Krystman / Lazy Devs Academy - CC-BY-NC-SA 4.0" },
+  { name: "combo-pool", from: LOCAL_EX, num8: true, blurb: "Combo Pool by NuSan (PICO-8 port). Merge balls, chain combos. CC-BY-NC-SA.", license: "Combo Pool (c) NuSan - CC-BY-NC-SA 4.0" },
+  { name: "newleste", from: LOCAL_EX, blurb: "Celeste Classic (newleste.p8 port). Climb, jump, dash. GPL-3.0.", license: "Celeste Classic / newleste.p8 - Maddy Thorson, Noel Berry + CelesteClassic community - GPL-3.0" },
   { name: "orbit", from: SDK_EX, blurb: "Bouncing bodies with fixed-point math." },
   { name: "audio", from: SDK_EX, blurb: "Built-in SFX and music." },
 ];
@@ -131,7 +133,11 @@ const examples = [];
 for (const ex of EX_LIST) {
   const dir = path.join(ex.from, ex.name);
   const src = path.join(dir, "main.lua");
-  if (!existsSync(src)) continue;
+  if (!existsSync(src)) {
+    // a listed example whose source is missing is a BUILD ERROR, not a silent
+    // skip - a silent skip is exactly how the 3 ports vanished from a deploy.
+    throw new Error(`example "${ex.name}" listed in EX_LIST but ${src} is missing`);
+  }
   await mkdir(path.join(EX_OUT, ex.name), { recursive: true });
   await cp(src, path.join(EX_OUT, ex.name, "main.lua"));
   const files = ["main.lua"];
@@ -149,8 +155,12 @@ for (const ex of EX_LIST) {
   // build links in one pass instead of running the ~10s placement search.
   // Self-validating downstream (function-set check + link proof), so a stale
   // layout only ever costs one extra pass.
-  if (existsSync(path.join(dir, "build", ".placement.json"))) {
-    await cp(path.join(dir, "build", ".placement.json"), path.join(EX_OUT, ex.name, "placement.json"));
+  // the winning bank layout (vendored placement.json, or the port's build dir)
+  const placementSrc = existsSync(path.join(dir, "placement.json"))
+    ? path.join(dir, "placement.json")
+    : path.join(dir, "build", ".placement.json");
+  if (existsSync(placementSrc)) {
+    await cp(placementSrc, path.join(EX_OUT, ex.name, "placement.json"));
   }
   const entry = { name: ex.name, blurb: ex.blurb, files };
   // 128x128 gallery thumbnail (an emulator screenshot of the example running),
