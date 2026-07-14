@@ -178,13 +178,24 @@ function bankFromParsed(sfx, music) {
 const P8_BTN_ASCII = { 0x8b: "[<]", 0x91: "[>]", 0x94: "[^]", 0x83: "[v]", 0x8e: "[O]", 0x97: "[X]" };
 const P8_BTN_INDEX = { 0x8b: "0", 0x91: "1", 0x94: "2", 0x83: "3", 0x8e: "4", 0x97: "5" };
 
+// Is this a byte that the gtlua lexer can never make sense of? PICO-8 source is
+// full of non-ASCII P8SCII bytes: the button glyphs (handled specially), fill-
+// pattern glyphs for fillp(), and assorted UI symbols, plus raw control bytes
+// that carts stash inside data strings. Anything in 0x00-0x1f (except tab/new
+// line) or 0x7f-0x9f is a P8SCII control/glyph that would raise "unexpected
+// character". (Real Unicode >= 0xa0 is left for the parser to reject visibly.)
+function isStrayByte(c) {
+  if (c === 9 || c === 10 || c === 13) return false;   // tab, LF, CR are fine
+  return c < 0x20 || (c >= 0x7f && c < 0xa0);
+}
+
 /**
- * Make P8SCII button glyphs readable in the imported source. In CODE position a
- * glyph becomes its numeric btn() index (0..5) - it would otherwise sit in the
- * text as an invisible byte (the compiler's lexer accepts either form, but a
- * bare `btn()` reads like a bug). Inside a STRING literal a glyph becomes an
- * ASCII token ([X], [O], arrows) so on-screen text renders on hardware. Any
- * other stray control byte inside a string is stripped.
+ * Neutralize PICO-8's P8SCII bytes so imported source lexes cleanly. Button
+ * glyphs become their numeric btn() index in CODE and a readable ASCII token
+ * ([X], [O], arrows) inside a STRING. Every other stray control/glyph byte is
+ * dropped (in code, replaced with a space so it can't fuse two tokens; in a
+ * string, removed). Whatever real dialect issue the line has still errors, but
+ * a garbage byte no longer adds a bogus "unexpected character" on top.
  * @param {string} lua
  * @returns {{ lua: string, translated: number, strays: number[] }}
  */
@@ -201,12 +212,13 @@ export function translateP8Glyphs(lua) {
       if (ch === "\\") { out += ch + (lua[++i] ?? ""); continue; }
       if (ch === quote) { quote = null; out += ch; continue; }
       if (P8_BTN_ASCII[c] !== undefined) { translated++; out += P8_BTN_ASCII[c]; continue; }
-      if (c >= 0x80 && c < 0xa0) { strays.add(c); continue; }   // unprintable byte in a string
+      if (isStrayByte(c)) { strays.add(c); continue; }   // unprintable byte in a string: drop
       out += ch;
       continue;
     }
     if (ch === '"' || ch === "'") { quote = ch; out += ch; continue; }
     if (P8_BTN_INDEX[c] !== undefined) { translated++; out += P8_BTN_INDEX[c]; continue; }
+    if (isStrayByte(c)) { strays.add(c); out += " "; continue; }   // glyph in code: blank it
     out += ch;
   }
   return { lua: out, translated, strays: [...strays] };
