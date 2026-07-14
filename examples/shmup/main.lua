@@ -163,23 +163,28 @@ function _update60()
   end
 end
 
+-- This game draws with sprf() (frame table) instead of spr() (8x8 grid).
+-- The frames live in gfx.gsi (the "gfx.gsi" tab): each names a region of the
+-- sheet plus a draw-anchor offset. That's what lets frame 2 be a 2x4 BULLET
+-- (not a full 8x8 cell) drawn centered on its position - spr() can't do that.
+-- Frames: 0 player, 1 enemy, 2 bullet (2x4), 3 orange enemy.
 function _draw()
   cls(col_bg)
 
   -- enemies + explosions
   for i = 1, 10 do
-    if (eon[i] == 1) spr(1, ex[i], ey[i])
-    if (eb[i] > 0) spr(3, ex[i], ey[i])
+    if (eon[i] == 1) sprf(1, ex[i], ey[i])
+    if (eb[i] > 0) sprf(3, ex[i], ey[i])
   end
 
-  -- bullets
+  -- bullets (frame 2 is a slim 2x4 sprite, centered by its .gsi anchor)
   for i = 1, 8 do
-    if (bon[i] == 1) spr(2, bx[i], by[i])
+    if (bon[i] == 1) sprf(2, bx[i], by[i])
   end
 
   -- player ship; blink while dead
   if dead == 0 or (dead % 8) < 4 then
-    spr(0, px, py)
+    sprf(0, px, py)
   end
 
   -- HUD: life pips + score bar

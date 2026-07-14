@@ -7,6 +7,10 @@
 -- faces right, cell 1 faces left). gt-lua: integer positions, boolean
 -- conditions.
 
+-- Draws the hero with sprf() (the gfx.gsi frame table): frame 0 faces
+-- right, frame 1 faces left. Each frame is cropped to the hero's true size
+-- (not a padded 8x8 cell), which is the point of a frame table.
+
 -- player (integers for pixel-perfect platforming)
 local px = 8
 local py = 96
@@ -177,7 +181,7 @@ function _draw()
   rectfill(WORLD - 12, 88, WORLD - 6, 94, col_flag)
 
   -- player: 8x8 sprite, cell 0 faces right / cell 1 faces left
-  if face > 0 then spr(0, px, py) else spr(1, px, py) end
+  if face > 0 then sprf(0, px, py) else sprf(1, px, py) end
 
   -- HUD text is screen-space: reset the camera before printing
   camera()
