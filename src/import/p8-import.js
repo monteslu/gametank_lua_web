@@ -236,10 +236,13 @@ function isStrayByte(c) {
 /**
  * Neutralize PICO-8's P8SCII bytes so imported source lexes cleanly. Button
  * glyphs become their numeric btn() index in CODE and a readable ASCII token
- * ([X], [O], arrows) inside a STRING. Every other stray control/glyph byte is
- * dropped (in code, replaced with a space so it can't fuse two tokens; in a
- * string, removed). Whatever real dialect issue the line has still errors, but
- * a garbage byte no longer adds a bogus "unexpected character" on top.
+ * ([X], [O], arrows) inside a STRING. Every other stray control/glyph byte in
+ * CODE becomes a valid identifier fragment (`_pNN`): PICO-8 allows high bytes in
+ * identifiers, so a whole cart may name a variable with a glyph (`<80> = "an"`);
+ * mapping to a name keeps that variable intact (a standalone glyph like a
+ * fillp() pattern just becomes an honest undeclared-name error, not a cascade).
+ * Inside a STRING the byte is dropped. A garbage byte never adds a bogus
+ * "unexpected character".
  * @param {string} lua
  * @returns {{ lua: string, translated: number, strays: number[] }}
  */
@@ -262,7 +265,7 @@ export function translateP8Glyphs(lua) {
     }
     if (ch === '"' || ch === "'") { quote = ch; out += ch; continue; }
     if (P8_BTN_INDEX[c] !== undefined) { translated++; out += P8_BTN_INDEX[c]; continue; }
-    if (isStrayByte(c)) { strays.add(c); out += " "; continue; }   // glyph in code: blank it
+    if (isStrayByte(c)) { strays.add(c); out += `_p${c.toString(16)}`; continue; }  // glyph -> valid name
     out += ch;
   }
   return { lua: out, translated, strays: [...strays] };
