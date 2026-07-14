@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { GameTankHost, PAD } from "./gametank-host.js";
+import { GT_INPUTS, pollGamepads, firstUnmapped } from "./gamepad.js";
+import { GamepadMapper } from "./GamepadMapper.jsx";
 
 // Keyboard -> RetroPad, matching gtlua-run.mjs (arrows move; Z/X/C = the three
 // face buttons A/B/C; Enter = start; RShift = select).
@@ -74,6 +76,38 @@ export function EmulatorPane({ rom, onHost, building, buildMsg }) {
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
+
+  const [padConnected, setPadConnected] = useState(false);
+  const [needsMap, setNeedsMap] = useState(null);   // an unmapped Gamepad, or null
+  const [mapping, setMapping] = useState(null);     // the Gamepad being remapped
+  const padPrev = useRef(new Set());
+  useEffect(() => {
+    if (status !== "running") return;
+    let raf = 0;
+    const key2pad = Object.fromEntries(GT_INPUTS.map((i) => [i.key, i.pad]));
+    const tick = () => {
+      const { pressed, active } = pollGamepads();
+      setPadConnected(active.length > 0);
+      // only touch pad ids the gamepad owns, so keyboard input still works
+      for (const inp of GT_INPUTS) {
+        const now = pressed.has(inp.key), was = padPrev.current.has(inp.key);
+        if (now !== was) hostRef.current?.setPad(key2pad[inp.key], now);
+      }
+      padPrev.current = pressed;
+      // a connected pad with no usable binds: prompt once (don't nag mid-map)
+      if (!mapping) setNeedsMap(firstUnmapped());
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); padPrev.current = new Set(); };
+  }, [status, mapping]);
+
+  // open the mapper on the connected pad (the unmapped one, or the first pad)
+  const openMapper = () => {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = needsMap || [...pads].find(Boolean);
+    if (gp) setMapping(gp);
+  };
 
   const goFullscreen = () => {
     const el = screenRef.current;
@@ -154,12 +188,28 @@ export function EmulatorPane({ rom, onHost, building, buildMsg }) {
           data-tip="Restart (reset the cart)"
           aria-label="restart"
         ><i className="ti ti-refresh" /></button>
+        <button
+          className={"emu-btn tip" + (needsMap ? " attn" : "")}
+          onClick={openMapper}
+          disabled={status !== "running" || !padConnected}
+          data-tip={needsMap ? "This controller needs mapping - click to set it up" : "Remap this controller"}
+          aria-label="map controller"
+        ><i className="ti ti-device-gamepad-2" /></button>
         <span className="emu-hint">
           {status === "running" && paused ? "stopped · press ▶ to resume"
+            : needsMap ? "controller connected · click the gamepad icon to map it"
+            : padConnected ? "controller ready · arrows/Z/X/C also work"
             : focused ? "arrows move · Z/X/C = A/B/C · Enter = start"
             : "click the screen to use the controls"}
         </span>
       </div>
+      {mapping && (
+        <GamepadMapper
+          gamepad={mapping}
+          onDone={() => { setMapping(null); setNeedsMap(null); }}
+          onClose={() => setMapping(null)}
+        />
+      )}
     </div>
   );
 }

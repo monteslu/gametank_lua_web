@@ -673,3 +673,36 @@ body {
 .quadpick-card canvas { width: 128px; height: 128px; image-rendering: pixelated; border-radius: 6px; }
 .quadpick-name { font: 700 12px var(--mono); color: var(--fg); }
 .quadpick-pos { font: 11px system-ui, sans-serif; color: var(--dim); }
+
+/* gamepad mapper */
+.emu-btn.attn { border-color: var(--sun); color: var(--sun); animation: gpm-pulse 1.2s ease-in-out infinite; }
+@keyframes gpm-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.gpm-box {
+  width: 380px; max-width: 92vw; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.gpm-body { padding: 16px 20px; }
+.gpm-prompt { font: 16px system-ui, sans-serif; color: var(--fg); margin-bottom: 6px; }
+.gpm-prompt b { color: var(--accent); }
+.gpm-progress { float: right; color: var(--dim); font-size: 12px; }
+.gpm-hint { color: var(--sun); font-size: 12px; margin-bottom: 10px; }
+.gpm-map { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 12px 0; }
+.gpm-bind {
+  display: flex; justify-content: space-between; font: 12px var(--mono);
+  color: var(--dim); padding: 3px 6px; border-radius: 5px;
+}
+.gpm-bind.cur { background: rgba(180,140,255,0.14); color: var(--fg); }
+.gpm-bind.set { color: var(--fg); }
+.gpm-src { color: var(--accent-2); }
+.gpm-actions { display: flex; gap: 10px; margin-top: 8px; }
+.gpm-actions button { padding: 7px 16px; font: 700 12px system-ui, sans-serif; border-radius: 8px; cursor: pointer; }
+.gpm-raw { border-top: 1px solid var(--line); padding: 10px 20px; background: #12151c; }
+.gpm-raw-row { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.gpm-raw-btn {
+  width: 20px; height: 18px; display: inline-flex; align-items: center;
+  justify-content: center; font: 10px var(--mono); color: #4b4368;
+  background: #1a1a22; border-radius: 3px;
+}
+.gpm-raw-btn.on { background: #b83a4e; color: #fff; }
+.gpm-raw-axes { display: flex; flex-wrap: wrap; gap: 8px; font: 10px var(--mono); color: var(--dim); }

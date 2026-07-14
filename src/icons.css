@@ -50,3 +50,6 @@
 .ti-copy::before { content: "\ea7a"; }
 .ti-scissors::before { content: "\eb1b"; }
 .ti-clipboard::before { content: "\ea6f"; }
+
+/* emulator: gamepad remap */
+.ti-device-gamepad-2::before { content: "\f1d2"; }
