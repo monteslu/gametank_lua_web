@@ -5,9 +5,9 @@ import React from "react";
  * cloned from an example - start from the New Project dialog (the + button).
  * Purely presentational - all mutations go through the callbacks.
  */
-export function Sidebar({ projects, currentId, onOpen, onNew, onDelete }) {
+export function Sidebar({ projects, currentId, onOpen, onNew, onDelete, width }) {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={width ? { flexBasis: `${width}px`, width: `${width}px` } : undefined}>
       <div className="side-section">
         <div className="side-head">
           <span>projects</span>

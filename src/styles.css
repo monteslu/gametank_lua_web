@@ -115,9 +115,24 @@ body {
   grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-rows: minmax(330px, auto) minmax(0, 1fr);
 }
+/* draggable column boundary. The sidebar one is an inline flex child (4px
+   gutter); the emulator one is absolutely positioned on the emu-pane's left edge
+   (that column is a grid cell, no room for a flex gutter). Both widen their hit
+   area slightly and glow on hover. */
+.col-resizer {
+  flex: 0 0 4px; width: 4px; align-self: stretch; cursor: col-resize;
+  background: var(--line); z-index: 5;
+}
+.col-resizer:hover, .col-resizer:active { background: var(--accent-2); }
+.emu-resizer {
+  position: absolute; top: 0; bottom: 0; left: -2px; width: 6px; flex: none;
+  background: transparent;
+}
+.emu-resizer:hover, .emu-resizer:active { background: var(--accent-2); }
+
 .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
 .editor-pane { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
-.emu-pane { grid-column: 2; grid-row: 1; border-right: none; }
+.emu-pane { grid-column: 2; grid-row: 1; border-right: none; position: relative; }
 .output-pane { grid-column: 2; grid-row: 2; border-right: none; border-top: 1px solid var(--line); }
 .pane-title {
   padding: 7px 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px;

@@ -19,6 +19,7 @@ import { zipStore, unzip } from "./projects/zip.js";
 import { readManifest, writeManifest, ensureManifest, defaultManifest } from "./projects/manifest.js";
 import { p8ToProject, p8PngToProject } from "./import/p8-import.js";
 import { downloadBytes, pickFile } from "./util/download.js";
+import { useResizableColumns } from "./util/useResizableColumns.js";
 import { SpriteEditor } from "./gfx/SpriteEditor.jsx";
 import { newSheet, splitSheet, joinSheet, QUAD_FILES } from "./gfx/gtg.js";
 import { FrameEditor } from "./gfx/FrameEditor.jsx";
@@ -56,6 +57,8 @@ export function App() {
   const [rom, setRom] = useState(null);
   const [host, setHost] = useState(null);          // running GameTankHost (for the debugger)
   const [bottomTab, setBottomTab] = useState("problems");   // "problems" | "ram"
+  // draggable + persisted column widths (sidebar | editor | emulator)
+  const { sidebarPx, emuPx, startSidebarDrag, startEmuDrag } = useResizableColumns();
   const [flash, setFlash] = useState(null);        // { log:[], done, total, label, error, running } while flashing
   const [building, setBuilding] = useState(false);
   const [warm, setWarm] = useState(false);       // build worker prewarmed (tools compiled + toolchain fetched)
@@ -635,12 +638,14 @@ export function App() {
 
       <div className="body">
         <Sidebar
+          width={sidebarPx}
           projects={projects}
           currentId={currentId}
           onOpen={openProject}
           onNew={() => setShowNew(true)}
           onDelete={(id) => setConfirmDelete(projects.find((p) => p.id === id) ?? { id, name: "this project" })}
         />
+        <div className="col-resizer" onPointerDown={startSidebarDrag} title="drag to resize" />
         {mergeImport && (
           <ImportMergeModal
             projectName={projectName}
@@ -674,7 +679,7 @@ export function App() {
           />
         )}
 
-        <main className="panes">
+        <main className="panes" style={{ gridTemplateColumns: `minmax(0, 1fr) ${emuPx}px` }}>
           <section className="pane editor-pane">
             {!currentId && (
               <div className="no-project">
@@ -752,6 +757,7 @@ export function App() {
           </section>
 
           <section className="pane emu-pane">
+            <div className="col-resizer emu-resizer" onPointerDown={startEmuDrag} title="drag to resize" />
             <EmulatorPane rom={rom} onHost={setHost} building={building} buildMsg={buildMsg} />
           </section>
 
