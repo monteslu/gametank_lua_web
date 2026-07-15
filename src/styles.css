@@ -69,7 +69,7 @@ body {
 
 /* sidebar (project explorer) */
 .sidebar {
-  width: 210px; flex: 0 0 210px; display: flex; flex-direction: column;
+  width: 180px; flex: 0 0 180px; display: flex; flex-direction: column;
   background: var(--panel); border-right: 1px solid var(--line); overflow: auto;
 }
 .side-section { border-bottom: 1px solid var(--line); }
@@ -100,15 +100,19 @@ body {
 }
 .side-del:hover { color: var(--err); }
 
-/* editor spans the left; emulator top-right, problems bottom-right. The
-   emulator row is sized to hold at least the 256 canvas + its chrome; problems
-   takes the remaining space. */
+/* editor spans the left; emulator top-right, problems bottom-right. The right
+   column is sized for the emulator (the 256 canvas + its chrome, ~304 gives the
+   canvas a little breathing room above the 256 minimum) - NOT for the RAM hex
+   dump. The RAM view is a secondary panel and scrolls horizontally on its own
+   (.ram overflow:auto + .ram-row nowrap) when its 16-byte rows exceed the
+   column, so the always-visible emulator no longer wastes ~200px of editor
+   width sizing for it. */
 .panes {
   flex: 1; display: grid; min-height: 0; min-width: 0;
   /* minmax(0, 1fr) - NOT plain 1fr - so the editor column can shrink below its
      content (a zoomed sprite canvas) and scroll inside itself instead of pushing
      the whole page wide. */
-  grid-template-columns: minmax(0, 1fr) 460px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-rows: minmax(330px, auto) minmax(0, 1fr);
 }
 .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
