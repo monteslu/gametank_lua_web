@@ -56,4 +56,12 @@ export default defineConfig({
       "gtlua/compiler/gtm2.mjs",
     ],
   },
+  // node: builtins stay external in BOTH bundles. romdev-core-host reaches its
+  // Node I/O adapter through a lazy `await import("./io-node.js")` on the
+  // path-based load paths, which never run in the browser (the IDE only ever
+  // hands it bytes) - but rollup still FOLLOWS the literal specifier and then
+  // fails on `readFile is not exported by __vite-browser-external`. gtlua's
+  // build driver has the same shape of lazy node fallback.
+  worker: { format: "es", rollupOptions: { external: [/^node:/] } },
+  build: { rollupOptions: { external: [/^node:/] } },
 });
