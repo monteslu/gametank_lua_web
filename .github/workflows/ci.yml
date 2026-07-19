@@ -1,0 +1,29 @@
+# CI: the IDE must build and pass its browser gates from a fresh checkout with
+# registry deps only — the same gates that run locally, including the
+# byte-identity assertion (browser-built cart == the gtlua CLI's .gtr).
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci        # postinstall stages the toolchain into public/
+
+      - name: vite production build
+        run: npm run build
+
+      - name: install chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: gates (byte-identical build + emulator + UI)
+        run: npm test
