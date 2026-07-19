@@ -7,10 +7,8 @@ import { spawnSync } from "node:child_process";
 // build. A quarantined test that starts PASSING is itself an error, so the
 // entry has to be deleted rather than quietly outliving the bug.
 const QUARANTINE = {
-  "browser-flash2m.mjs":
-    "the banked-cart example outgrew its code bank (B0CODE over by ~11k); " +
-    "cc65 drops inlining and then the blit font, and still overflows. " +
-    "Pre-existing and unrelated to the IDE - needs the example split across banks.",
+  // (empty) browser-flash2m.mjs was quarantined for a bank overflow; gtlua
+  // 0.5.0's 14-bank FLASH2M XL fixed it and the test is green again.
 };
 
 const fast = process.argv.includes("--fast");
