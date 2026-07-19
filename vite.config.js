@@ -52,6 +52,7 @@ export default defineConfig({
       "gtlua/compiler/builtins.js",
       "gtlua/compiler/frames.js",
       "gtlua/compiler/gt_palette.js",
+      "gtlua/compiler/peephole.js",   // imported by build.js, so the worker reaches it
       "gtlua/compiler/gtm2.mjs",
     ],
   },
