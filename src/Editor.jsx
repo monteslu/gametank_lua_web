@@ -1,5 +1,15 @@
-import React, { useCallback, useRef } from "react";
-import MonacoEditor, { loader } from "@monaco-editor/react";
+// Editor — Monaco with gt-lua intelligence.
+//
+// The language service itself is luacretro-web's (completions from the SDK
+// builtins table, gt.* member completions, signature help, hover). What stays
+// here is the gt-lua MANIFEST: the hand-written signatures below, the tiering
+// that keeps the everyday API above the specialist engines, and this app's
+// Monaco theme.
+//
+// Diagnostics arrive as a prop: this IDE compiles in its build pipeline and
+// passes the results down, rather than compiling again in the editor.
+import React from "react";
+import { loader } from "@monaco-editor/react";
 // Editor CORE only (not the "monaco-editor" barrel, which registers EVERY
 // language and bloats the bundle by ~3MB).
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
@@ -7,27 +17,22 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 // use it as the base and only layer gt-lua completions + diagnostics on top. We
 // do NOT hand-write a Lua grammar.
 import "monaco-editor/esm/vs/basic-languages/lua/lua.contribution";
+import { LuaEditor } from "luacretro-web/editor";
 import { BUILTINS, CALLBACKS, GT_MEMBERS } from "gtlua/compiler/builtins.js";
 
 // Use the LOCALLY-bundled monaco (not the default CDN) - the app is self-contained.
 loader.config({ monaco });
 
-const KEYWORDS = [
-  "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
-  "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
-  "true", "until", "while",
-];
-const BUILTIN_NAMES = Object.keys(BUILTINS);
-const GT_MEMBER_NAMES = Object.keys(GT_MEMBERS);
+// Everyday PICO-8 verbs the compiler table does not carry as callable defs but
+// that gt-lua programs use constantly - offered so completion never feels thin.
 const EXTRA = ["btn", "btnp", "print", "rnd", "flr", "abs", "min", "max", "sin", "cos",
   "sqrt", "band", "bor", "bxor", "shl", "shr", "mid", "sgn", "peek", "poke", "sfx", "music"];
-const ALL_BUILTINS = [...new Set([...BUILTIN_NAMES, ...EXTRA])];
 
 // Hand-written signatures for the everyday API: real parameter names + a
 // one-line doc, exactly what a beginner needs when the hint pops up. Anything
 // not listed falls back to the compiler's own param-kind table, so EVERY
 // builtin and gt.* member shows something.
-const SIGNATURES = {
+const DOCS = {
   cls: ["([col])", "clear the screen (default color 0 = black)"],
   print: ["(text, [x], [y], [col])", "draw text; returns the x where it ended"],
   pset: ["(x, y, [col])", "set one pixel"],
@@ -112,111 +117,31 @@ const SIGNATURES = {
   "gt.track_dims": ["(wtiles)", "track world size in tiles per side (default 90 = 30x30 chunks)"],
 };
 
-// Add the gt-lua-specific layer to Monaco's built-in `lua` language: completions
-// (builtins, callbacks, gt.* members), signature help + a dark theme.
-// Registered once.
-let registered = false;
-function registerGtLua(m) {
-  if (registered) return;
-  registered = true;
+// tiers keep the everyday API on top; specialist engines sink
+const memberTier = (n) => {
+  if (["rgb", "ticks", "border", "autocls", "print_buf", "note", "noteoff"].includes(n)) return "1";
+  if (/^(phys_|pool_|parts_|hit_scan|dbar|parallax_|drift_|chain)/.test(n)) return "2";
+  if (/^(bg_|gspr|canvas_view|tiles_draw|gflush)/.test(n)) return "3";
+  return "4";   // track_*, chunks_draw, mark, the exotic rest
+};
 
-  m.languages.registerCompletionItemProvider("lua", {
-    triggerCharacters: ["."],
-    provideCompletionItems(model, position) {
-      const line = model.getValueInRange({ startLineNumber: position.lineNumber, startColumn: 1, endColumn: position.column, endLineNumber: position.lineNumber });
-      const word = model.getWordUntilPosition(position);
-      const range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
-      const K = m.languages.CompletionItemKind;
-      // after `gt.` suggest members
-      if (/\bgt\.\w*$/.test(line)) {
-        // tiers keep the everyday API on top; specialist engines sink
-        const tierOf = (n) => {
-          if (["rgb", "ticks", "border", "autocls", "print_buf", "note", "noteoff"].includes(n)) return "1";
-          if (/^(phys_|pool_|parts_|hit_scan|dbar|parallax_|drift_|chain)/.test(n)) return "2";
-          if (/^(bg_|gspr|canvas_view|tiles_draw|gflush)/.test(n)) return "3";
-          return "4";   // track_*, chunks_draw, mark, the exotic rest
-        };
-        return { suggestions: GT_MEMBER_NAMES.map((name) => {
-          const sig = SIGNATURES["gt." + name];
-          return {
-            label: name, kind: K.Method, insertText: name, range,
-            sortText: tierOf(name) + "_" + name,
-            detail: sig ? "gt." + name + sig[0] : "gt." + name,
-            documentation: sig ? sig[1] : undefined,
-          };
-        }) };
-      }
-      const suggestions = [
-        ...ALL_BUILTINS.map((name) => {
-          const sig = SIGNATURES[name];
-          return {
-            label: name, kind: K.Function, insertText: name, range,
-            detail: sig ? name + sig[0] : "gt-lua builtin",
-            documentation: sig ? sig[1] : undefined,
-          };
-        }),
-        ...CALLBACKS.map((name) => ({ label: name, kind: K.Event, insertText: name, range, detail: "callback (_init/_update/_draw...)" })),
-        { label: "gt", kind: K.Module, insertText: "gt", range, detail: "GameTank API namespace" },
-      ];
-      return { suggestions };
-    },
-  });
+const LANGUAGE = {
+  builtins: BUILTINS,
+  callbacks: CALLBACKS,
+  members: GT_MEMBERS,
+  memberNs: "gt",
+  extraBuiltins: EXTRA,
+  docs: DOCS,
+  owner: "gtlua",
+  callbackDoc: "callback (_init/_update/_draw...)",
+  tiers: { memberRank: memberTier },
+};
 
-  // parameter hints: typing `rectfill(` pops the signature with the active
-  // argument highlighted, VS Code style. Names come from SIGNATURES above;
-  // everything else derives labels from the compiler's param kinds.
-  const sigFor = (callee) => {
-    const named = SIGNATURES[callee];
-    if (named) return { label: callee + named[0], doc: named[1] };
-    const entry = callee.startsWith("gt.") ? GT_MEMBERS[callee.slice(3)] : BUILTINS[callee];
-    if (!entry || !entry.params) return null;
-    const parts = entry.params.map(([kind, opt]) => (opt ? `[${kind}]` : kind));
-    return { label: `${callee}(${parts.join(", ")})`, doc: "" };
-  };
-  m.languages.registerSignatureHelpProvider("lua", {
-    signatureHelpTriggerCharacters: ["(", ","],
-    signatureHelpRetriggerCharacters: [","],
-    provideSignatureHelp(model, position) {
-      // scan back from the cursor (up to 4 lines) for the innermost unclosed
-      // '(' and count the commas at its depth = the active argument
-      const startLine = Math.max(1, position.lineNumber - 4);
-      const text = model.getValueInRange({
-        startLineNumber: startLine, startColumn: 1,
-        endLineNumber: position.lineNumber, endColumn: position.column,
-      });
-      let depth = 0, open = -1, commas = 0;
-      for (let i = text.length - 1; i >= 0; i--) {
-        const c = text[i];
-        if (c === ")") depth++;
-        else if (c === "(") {
-          if (depth === 0) { open = i; break; }
-          depth--;
-        } else if (c === "," && depth === 0) commas++;
-      }
-      if (open < 0) return null;
-      const head = text.slice(0, open);
-      const mCallee = head.match(/(gt\.\w+|\w+)\s*$/);
-      if (!mCallee) return null;
-      const sig = sigFor(mCallee[1]);
-      if (!sig) return null;
-      // split the label's arg list into parameter ranges so Monaco can bold
-      // the active one
-      const argsPart = sig.label.slice(sig.label.indexOf("(") + 1, -1);
-      const params = argsPart.length
-        ? argsPart.split(",").map((a) => ({ label: a.trim() }))
-        : [];
-      return {
-        value: {
-          signatures: [{ label: sig.label, documentation: sig.doc, parameters: params }],
-          activeSignature: 0,
-          activeParameter: Math.min(commas, Math.max(0, params.length - 1)),
-        },
-        dispose() {},
-      };
-    },
-  });
-
-  // a dark theme close to our app palette (colors Monaco's own Lua tokens)
+// a dark theme close to our app palette (colors Monaco's own Lua tokens)
+let themed = false;
+function defineTheme(m) {
+  if (themed) return;
+  themed = true;
   m.editor.defineTheme("gtlua-dark", {
     base: "vs-dark", inherit: true,
     rules: [
@@ -237,62 +162,28 @@ function registerGtLua(m) {
 /**
  * The code editor: Monaco (the VS Code editor), self-hosted (no CDN), using
  * Monaco's built-in Lua language for highlighting, with a thin gt-lua layer on
- * top (completions for our builtins + live compiler diagnostics as markers).
+ * top (completions for our builtins + the compiler's diagnostics as markers).
  */
 export function Editor({ value, onChange, diagnostics }) {
-  const monacoRef = useRef(null);
-  const editorRef = useRef(null);
-
-  const beforeMount = useCallback((m) => { registerGtLua(m); }, []);
-
-  const onMount = useCallback((editor, m) => {
-    monacoRef.current = m;
-    editorRef.current = editor;
-    pushMarkers(m, editor, diagnostics);
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyR, () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true }));
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (monacoRef.current && editorRef.current) pushMarkers(monacoRef.current, editorRef.current, diagnostics);
-
   return (
-    <MonacoEditor
+    <LuaEditor
       className="monaco"
-      language="lua"
-      theme="gtlua-dark"
       value={value}
-      onChange={(v) => onChange(v ?? "")}
-      beforeMount={beforeMount}
-      onMount={onMount}
+      onChange={onChange}
+      language={LANGUAGE}
+      diagnostics={diagnostics}
+      theme="gtlua-dark"
+      beforeMount={defineTheme}
+      onPlay={() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true }));
+      }}
       options={{
         fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
-        fontSize: 13,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        tabSize: 2,
-        insertSpaces: true,
-        automaticLayout: true,
         renderLineHighlight: "line",
         smoothScrolling: true,
+        insertSpaces: true,
         padding: { top: 8 },
       }}
     />
   );
-}
-
-function pushMarkers(m, editor, diagnostics) {
-  const model = editor.getModel();
-  if (!model) return;
-  const sev = (s) => (s === "error" ? m.MarkerSeverity.Error : s === "warning" ? m.MarkerSeverity.Warning : m.MarkerSeverity.Info);
-  const markers = (diagnostics || []).map((d) => ({
-    severity: sev(d.severity),
-    message: d.message,
-    startLineNumber: d.line || 1,
-    endLineNumber: d.line || 1,
-    startColumn: d.col || 1,
-    endColumn: (d.col || 1) + 1,
-  }));
-  m.editor.setModelMarkers(model, "gtlua", markers);
 }

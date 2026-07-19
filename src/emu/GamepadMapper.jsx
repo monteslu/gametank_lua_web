@@ -1,17 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
+import { useGamepadMapping } from "luacretro-web/input";
 import { GT_INPUTS, saveMapping } from "./gamepad.js";
 
-// Walk the 8 GameTank inputs one at a time: prompt, wait for the stick/pad to
-// settle, then capture the first button or axis that moves. Same flow as
-// wasmcart's mapper, sized to the GameTank pad. Detection thresholds match
-// gamepad.js so what you bind is what fires in-game.
-const BUTTON_ON = 0.5;
-const AXIS_ON = 0.5;
-const SETTLE = 0.35;
+// This IDE's mapper is a bind GRID with a live raw readout and skip/back, not
+// the single-prompt dialog the other IDEs use, so the markup stays local. The
+// walk itself — capture, settle, advance — comes from the shared hook.
 
-function snapshot(gp) {
-  return { buttons: Array.from(gp.buttons, (b) => b.value), axes: Array.from(gp.axes) };
-}
+const srcLabel = (b) => (
+  b ? (b.kind === "button" ? `btn ${b.index}` : `axis ${b.index}${b.dir > 0 ? "+" : "-"}`) : null
+);
 
 /**
  * @param {Gamepad} gamepad  the pad being mapped (from navigator.getGamepads)
@@ -19,84 +16,14 @@ function snapshot(gp) {
  * @param {()=>void} onClose
  */
 export function GamepadMapper({ gamepad, onDone, onClose }) {
-  const [step, setStep] = useState(0);           // index into GT_INPUTS, === length when done
-  const [settling, setSettling] = useState(false); // waiting for release before the next capture
-  const [raw, setRaw] = useState({ buttons: [], axes: [] });
-  const bindsRef = useRef({});
-  const restRef = useRef(null);
-  const rafRef = useRef(0);
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    const gpNow = () => (navigator.getGamepads ? navigator.getGamepads()[gamepad.index] : null);
-    restRef.current = snapshot(gpNow() || gamepad);
-
-    const isSettled = (gp) => {
-      const rest = restRef.current;
-      for (let i = 0; i < gp.buttons.length; i++) if (gp.buttons[i].value > BUTTON_ON) return false;
-      for (let i = 0; i < gp.axes.length; i++) {
-        const r = rest.axes[i] ?? 0;
-        if (Math.abs(gp.axes[i] - r) > SETTLE) return false;
-      }
-      return true;
-    };
-    const detect = (gp) => {
-      const rest = restRef.current;
-      for (let i = 0; i < gp.buttons.length; i++) {
-        if ((rest.buttons[i] ?? 0) < BUTTON_ON && gp.buttons[i].value >= BUTTON_ON)
-          return { kind: "button", index: i };
-      }
-      for (let i = 0; i < gp.axes.length; i++) {
-        const r = rest.axes[i] ?? 0;
-        const d = gp.axes[i] - r;
-        if (Math.abs(d) > AXIS_ON) return { kind: "axis", index: i, dir: d > 0 ? 1 : -1 };
-      }
-      return null;
-    };
-
-    let stepLocal = 0, settleLocal = false;
-    const loop = () => {
-      const gp = gpNow();
-      if (gp) {
-        setRaw(snapshot(gp));
-        if (stepLocal < GT_INPUTS.length) {
-          if (settleLocal) {
-            if (isSettled(gp)) { settleLocal = false; setSettling(false); restRef.current = snapshot(gp); }
-          } else {
-            const src = detect(gp);
-            if (src) {
-              bindsRef.current[GT_INPUTS[stepLocal].key] = src;
-              stepLocal += 1; settleLocal = true;
-              setStep(stepLocal); setSettling(true);
-              restRef.current = snapshot(gp);
-            }
-          }
-        }
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [gamepad]);
-
-  const done = step >= GT_INPUTS.length;
-  const cur = GT_INPUTS[step];
+  const walk = useGamepadMapping({
+    gamepad, inputs: GT_INPUTS, onClose, trackRaw: true,
+  });
+  const { step, settling, done, current: cur, binds, raw } = walk;
 
   const finish = () => {
-    const mapping = { id: gamepad.id, binds: { ...bindsRef.current } };
-    saveMapping(mapping);
+    const mapping = walk.finish(saveMapping);
     onDone(mapping.binds);
-  };
-  const skip = () => { setStep((s) => Math.min(GT_INPUTS.length, s + 1)); setSettling(true); };
-  const redo = () => {
-    const prev = Math.max(0, step - 1);
-    delete bindsRef.current[GT_INPUTS[prev].key];
-    setStep(prev); setSettling(false);
   };
 
   return (
@@ -117,19 +44,15 @@ export function GamepadMapper({ gamepad, onDone, onClose }) {
             {settling && <div className="gpm-hint">release everything…</div>}
             <div className="gpm-map">
               {GT_INPUTS.map((inp, i) => (
-                <div key={inp.key} className={"gpm-bind" + (i === step ? " cur" : "") + (bindsRef.current[inp.key] ? " set" : "")}>
+                <div key={inp.key} className={"gpm-bind" + (i === step ? " cur" : "") + (binds[inp.key] ? " set" : "")}>
                   <span>{inp.label}</span>
-                  <span className="gpm-src">{bindsRef.current[inp.key]
-                    ? (bindsRef.current[inp.key].kind === "button"
-                        ? `btn ${bindsRef.current[inp.key].index}`
-                        : `axis ${bindsRef.current[inp.key].index}${bindsRef.current[inp.key].dir > 0 ? "+" : "-"}`)
-                    : (i === step ? "…" : "")}</span>
+                  <span className="gpm-src">{srcLabel(binds[inp.key]) ?? (i === step ? "…" : "")}</span>
                 </div>
               ))}
             </div>
             <div className="gpm-actions">
-              <button className="confirm-cancel" onClick={skip}>Skip</button>
-              {step > 0 && <button className="confirm-cancel" onClick={redo}>Back</button>}
+              <button className="confirm-cancel" onClick={walk.skip}>Skip</button>
+              {step > 0 && <button className="confirm-cancel" onClick={walk.back}>Back</button>}
             </div>
           </div>
         ) : (
@@ -139,17 +62,13 @@ export function GamepadMapper({ gamepad, onDone, onClose }) {
               {GT_INPUTS.map((inp) => (
                 <div key={inp.key} className={"gpm-bind set"}>
                   <span>{inp.label}</span>
-                  <span className="gpm-src">{bindsRef.current[inp.key]
-                    ? (bindsRef.current[inp.key].kind === "button"
-                        ? `btn ${bindsRef.current[inp.key].index}`
-                        : `axis ${bindsRef.current[inp.key].index}${bindsRef.current[inp.key].dir > 0 ? "+" : "-"}`)
-                    : "(skipped)"}</span>
+                  <span className="gpm-src">{srcLabel(binds[inp.key]) ?? "(skipped)"}</span>
                 </div>
               ))}
             </div>
             <div className="gpm-actions">
               <button className="confirm-danger" style={{ background: "#3a8a4e" }} onClick={finish}>Save &amp; use</button>
-              <button className="confirm-cancel" onClick={() => setStep(0)}>Redo all</button>
+              <button className="confirm-cancel" onClick={walk.restart}>Redo all</button>
             </div>
           </div>
         )}
