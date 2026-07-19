@@ -3,26 +3,15 @@
 // set Lua to spr(0, x, y), build, and verify the sprite's color appears on the
 // emulator - proving the drawn .gtg rides into the cart and blits in-game.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
-
-const PORT = 5000 + Math.floor(Date.now() % 900);
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const d = (x) => { out += x; if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", d); proc.stderr.on("data", d); setTimeout(() => reject(new Error("no vite")), 20000);
-  });
-}
+import { startVite } from "./vite-server.mjs";
 
 // byte 40 is a bright color; we'll fill cell 0 with it and look for it on screen
 const SPRITE_BYTE = 40;
 
-let proc, failed = false;
+let proc, URL_, PORT, failed = false;
 const check = (n, c) => { console.log((c ? "  ok " : "FAIL ") + n); if (!c) failed = true; };
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_, port: PORT } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 200)));

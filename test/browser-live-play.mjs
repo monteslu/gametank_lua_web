@@ -2,28 +2,17 @@
 // and tempo (and adding notes) should take effect on the next iteration - the
 // playhead should wrap at the NEW step count, not the count from when play began.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
-
-const PORT = 5000 + Math.floor(Date.now() % 900);
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const d = (x) => { out += x; if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", d); proc.stderr.on("data", d); setTimeout(() => reject(new Error("no vite")), 20000);
-  });
-}
+import { startVite } from "./vite-server.mjs";
 
 const maxPlayRow = (page) => page.evaluate(() => {
   const rows = [...document.querySelectorAll(".mg-row")];
   return rows.findIndex((r) => r.classList.contains("playhead"));
 });
 
-let proc, failed = false;
+let proc, URL_, PORT, failed = false;
 const check = (n, c) => { console.log((c ? "  ok " : "FAIL ") + n); if (!c) failed = true; };
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_, port: PORT } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1300, height: 900 } });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));

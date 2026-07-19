@@ -2,19 +2,8 @@
 // through midiToSong, and verify notes land in the grid; also exercise the
 // import button via setInputFiles with a real .mid file.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
-
-const PORT = 5000 + Math.floor(Date.now() % 900);
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const d = (x) => { out += x; if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", d); proc.stderr.on("data", d); setTimeout(() => reject(new Error("no vite")), 20000);
-  });
-}
+import { startVite } from "./vite-server.mjs";
 
 // build a tiny format-0 SMF: C E G C quarter notes
 function makeMidi() {
@@ -27,12 +16,12 @@ function makeMidi() {
   return Buffer.from([...hdr, ...trk]);
 }
 
-let proc, failed = false;
+let proc, URL_, PORT, failed = false;
 const check = (n, c) => { console.log((c ? "  ok " : "FAIL ") + n); if (!c) failed = true; };
 const midPath = new URL("../.tmp-test.mid", import.meta.url).pathname;
 try {
   writeFileSync(midPath, makeMidi());
-  proc = await startVite();
+  ({ proc: proc, url: URL_, port: PORT } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));

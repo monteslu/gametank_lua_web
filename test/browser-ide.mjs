@@ -1,24 +1,12 @@
 // Playwright: the IDE shell smoke test. Sidebar seeds a hello project, examples
 // load, forking an example opens it, and the Play loop still runs a cart.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
+import { startVite } from "./vite-server.mjs";
 
-const PORT = 5000 + Math.floor(Date.now() % 900);
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const onData = (d) => { out += d; if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", onData); proc.stderr.on("data", onData);
-    setTimeout(() => reject(new Error("no vite:\n" + out)), 20000);
-  });
-}
-
-let proc, failed = false;
+let proc, URL_, PORT, failed = false;
 const check = (name, cond) => { console.log((cond ? "  ok " : "FAIL ") + name); if (!cond) failed = true; };
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_, port: PORT } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 200)));

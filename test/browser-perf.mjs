@@ -2,25 +2,14 @@
 // small game must be well under a second (it's ~70ms after the O(n^2) linker-IO
 // fix; guard at 800ms to catch a regression). Prints timings; fails if slow.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
-
-const PORT = 5000 + Math.floor(Date.now() % 900);
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const d = (x) => { out += x; if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", d); proc.stderr.on("data", d); setTimeout(() => reject(new Error("no vite")), 20000);
-  });
-}
+import { startVite } from "./vite-server.mjs";
 
 const HELLO = `function _draw()\n  cls(1)\n  print("hi", 40, 40, 14)\n  circfill(64, 64, 20, 10)\nend\n`;
 const build = (page, src) => page.evaluate((src) => window.__gtlua_test.build(src).then((r) => r.ms), src);
 
-let proc, failed = false;
+let proc, URL_, PORT, failed = false;
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_, port: PORT } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));

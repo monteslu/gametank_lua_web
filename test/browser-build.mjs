@@ -1,30 +1,12 @@
 // Playwright test: build a Lua game to a .gtr in a REAL browser, in the Worker
 // (threaded, warm tools). Owns vite's lifecycle; kills the whole process group.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
+import { startVite } from "./vite-server.mjs";
 
-const PORT = 5000 + Math.floor(Date.now() % 900);
-const URL_ = `http://localhost:${PORT}/`;
-
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname,
-      env: process.env,
-      detached: true,
-    });
-    let out = "";
-    const onData = (d) => { out += d.toString(); if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", onData);
-    proc.stderr.on("data", onData);
-    setTimeout(() => reject(new Error("vite did not start:\n" + out)), 20000);
-  });
-}
-
-let proc;
+let proc, URL_;
 let failed = false;
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_ } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.on("console", (m) => { if (m.type() === "error") console.log("[console.error]", m.text().slice(0, 200)); });

@@ -2,32 +2,17 @@
 // SDK's real build(), and prove the .gtr is BYTE-IDENTICAL to the CLI's golden.
 // This is the proof that the browser and CLI run the identical banking pipeline.
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-
-const PORT = 5000 + Math.floor(Date.now() % 900);
-const URL_ = `http://localhost:${PORT}/`;
-
-function startVite() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = "";
-    const onData = (d) => { out += d.toString(); if (out.includes(`:${PORT}`)) resolve(proc); };
-    proc.stdout.on("data", onData); proc.stderr.on("data", onData);
-    setTimeout(() => reject(new Error("vite did not start:\n" + out)), 20000);
-  });
-}
+import { startVite } from "./vite-server.mjs";
 
 const DRIFT = "/home/monteslu/code/cliemu/gtlua-ports/driftmania";
 const src = readFileSync(`${DRIFT}/main.lua`, "utf8");
 const sheetB64 = Buffer.from(readFileSync(`${DRIFT}/gfx.gtg`)).toString("base64");
 const golden = readFileSync("/home/monteslu/code/cliemu/gtlua-build-golden/driftmania.gtr");
 
-let proc, failed = false;
+let proc, URL_, failed = false;
 try {
-  proc = await startVite();
+  ({ proc: proc, url: URL_ } = await startVite(import.meta.url));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.on("console", (m) => { if (m.type() === "error") console.log("[err]", m.text().slice(0, 200)); });

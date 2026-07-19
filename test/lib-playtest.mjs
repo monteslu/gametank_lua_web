@@ -1,22 +1,13 @@
 // lib-playtest.mjs - shared harness for driving a genre example with REAL input
 // and reading the framebuffer, so tests prove playability (not just "it renders").
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
+import { startVite } from "./vite-server.mjs";
 
-export function startVite() {
-  const PORT = 5000 + Math.floor(Date.now() % 900);
-  return new Promise((resolve, reject) => {
-    const proc = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], {
-      cwd: new URL("..", import.meta.url).pathname, env: process.env, detached: true,
-    });
-    let out = ""; const d = (x) => { out += x; if (out.includes(`:${PORT}`)) resolve({ proc, PORT }); };
-    proc.stdout.on("data", d); proc.stderr.on("data", d); setTimeout(() => reject(new Error("no vite")), 20000);
-  });
-}
+export { startVite };
 
 // Open the IDE, fork `game`, build+run it, click the emulator to grab input.
 export async function launch(game) {
-  const { proc, PORT } = await startVite();
+  const { proc, port: PORT } = await startVite(import.meta.url);
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ deviceScaleFactor: 2 });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 160)));
